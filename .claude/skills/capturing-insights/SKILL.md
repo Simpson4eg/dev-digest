@@ -1,9 +1,9 @@
 ---
-name: engineering-insights
+name: capturing-insights
 description: Capture practical engineering findings right after finishing a coding task. Use immediately after completing any code change in this repo — implementing a feature, fixing a bug, refactoring, wiring an adapter — to append non-obvious discoveries (hidden cross-module dependencies, gotchas/footguns, measured facts like timings or token counts) to the touched module's INSIGHTS.md. Every entry needs file:line evidence and a date. Trigger after edits under client/, server/, reviewer-core/, or e2e/. Does NOT apply to pure docs/config edits with no code change, and is NOT a summary of what you did.
 ---
 
-# engineering-insights
+# capturing-insights
 
 Captures non-obvious engineering findings into the touched module's
 `INSIGHTS.md`. The point is **compounding knowledge** between sessions: a future
@@ -23,19 +23,24 @@ Do **not** trigger when:
 
 ## Three mandatory checkpoints
 
-These are the rules that close the read↔write loop. All three are required.
+These are the rules that close the read↔write loop. All three are **required**.
 
-### 1. Pre-work read
+### 1. Pre-work read (active summary)
 
 Before touching code:
 - Read `<package>/INSIGHTS.md` for every package the task involves. If the file
   doesn't exist yet, note that — first run for that module.
 - Read every reference the user attached for the topic (slide screenshot,
   research dump, linked doc). Mandatory, not "if convenient".
-- Confirm in one short line of user-facing text: e.g.
-  `Read server/INSIGHTS.md (3 entries) + the attached slide.`
-- This is an **active read** — pasiv loading is unreliable. The confirmation
-  doubles as a sanity-check that the file was actually opened.
+- **MUST** summarize the top-3 entries most relevant to today's task in one
+  line of user-facing text. Example:
+  `Read server/INSIGHTS.md (3 entries). Most relevant: (a) Drizzle .returning()
+  on pgvector ships ~1500 floats — select narrowly; (b) Windows-only ENOENT in
+  writeFileAt at indexer-pipeline.test.ts:142; (c) Stripe key seeded in plain
+  text — don't re-introduce.`
+- This is **active processing**, not passive read. The summary doubles as a
+  sanity-check that the file actually loaded *and* that the agent picked the
+  right entries for context.
 
 ### 2. Pre-write dedupe
 
@@ -72,17 +77,22 @@ add one entry per affected package, each phrased from that package's POV.
 
 ## File shape — 7 fixed sections
 
-If `<package>/INSIGHTS.md` doesn't exist, create it from the skeleton in
+If `<package>/INSIGHTS.md` doesn't exist, create it from
 `templates/INSIGHTS.md`. The sections are fixed — don't invent new ones:
 
 1. `## What Works` — patterns/solutions that worked.
 2. `## What Doesn't Work` — antipatterns, dead ends. (Most-skipped section,
-   most valuable. Don't skip.)
+   most valuable. **Don't skip.**)
 3. `## Codebase Patterns` — conventions and architectural decisions.
 4. `## Tool & Library Notes` — dependency quirks (versions, limits, defaults).
 5. `## Recurring Errors & Fixes` — error → fix pairs you've now seen twice.
 6. `## Session Notes` — datestamped session summaries (only when substantive).
 7. `## Open Questions` — things you didn't fully resolve.
+
+**If the file exists but a section is missing** (someone manually trimmed it):
+insert the missing section under the correct heading **without touching the
+other sections**. Don't regenerate the whole file from the template — that
+would overwrite real entries.
 
 ## Entry format
 
@@ -125,8 +135,9 @@ If a similar entry exists, update it (date + new evidence) rather than dup.
 
 - **Append-only.** Never overwrite. Merge conflicts and lost lessons come from
   overwrites.
-- **Git-versioned.** `<package>/INSIGHTS.md` is checked in. Bad entries are
-  caught at review; the file's history is the audit trail.
+- **Git-versioned.** `<package>/INSIGHTS.md` is checked into the repo (not into
+  `${CLAUDE_PLUGIN_DATA}`). This is deliberate: the file is a team artifact
+  reviewed in PRs, and history matters when an entry turns out to be wrong.
 - **Draft under review.** This skill writes the first pass; a human spot-checks
   it. Don't treat the file as canonical truth — treat it as a high-signal draft.
 - **Trim later.** Past ~200 entries per file, signal-to-noise drops. Future
@@ -136,7 +147,7 @@ If a similar entry exists, update it (date + new evidence) rather than dup.
 ## Reliability — be honest
 
 This skill's auto-discovery (via description) and the manual
-`/engineering-insights` slash-command both depend on the agent **noticing**
+`/capturing-insights` slash-command both depend on the agent **noticing**
 the trigger condition. They will be missed sometimes. The reliable fix —
 a session-Stop hook that runs the skill automatically — comes in L06. Until
 then: best-effort + manual fallback.
@@ -145,5 +156,7 @@ then: best-effort + manual fallback.
 
 - `examples.md` — bad/good entry pairs (read when judging an entry's quality).
 - `templates/INSIGHTS.md` — skeleton for first-time creation.
-- `../../CLAUDE.md` (root) — the "Session capture" block that names these three
-  checkpoints as the contract every session honors.
+- `evaluations/` — three walkthrough scenarios you can use to sanity-check
+  whether the skill is firing correctly.
+- `../../CLAUDE.md` (root) — the `Session Context` + `End of Session` blocks
+  that name these three checkpoints as the contract every session honors.

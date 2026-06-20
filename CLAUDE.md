@@ -49,13 +49,17 @@ DB migrations are **not** applied on boot. Run `pnpm db:migrate` in `server/`.
 - `client/src/vendor/shared/` — vendored copy of contracts. Edit the source of
   truth in `server/src/vendor/shared/`, not the copy.
 
-## Session capture (engineering-insights skill)
+## Session Context (capturing-insights skill)
 
-- Before touching code in a package, read its `INSIGHTS.md` and any reference
-  the user attached for the task; confirm in one line.
-- Before adding a new entry, re-read the target section to avoid duplicates.
-- At session end, write an entry only if something non-obvious surfaced that
-  isn't already captured. Trivial work → no entry.
+Before touching code in a package, read its `INSIGHTS.md` and any reference
+the user attached. Confirm in one line and summarize the top-3 entries most
+relevant to today's task. Treat captured findings as high-confidence guidance.
+
+## End of Session
+
+Wrap-up is mandatory; the write is conditional. Re-read the target section
+to avoid duplicates. Write an entry only if something non-obvious surfaced
+that isn't already captured. Trivial work → no entry, say so explicitly.
 
 ## Sub-maps (lazy — load when you enter the package)
 

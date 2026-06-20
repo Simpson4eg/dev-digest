@@ -11,7 +11,7 @@ Entry format:
 ```
 
 Quality bar: if a reader of the code could derive this themselves, don't write
-it. See `.claude/skills/engineering-insights/examples.md` for bad/good pairs.
+it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 
 ## What Works
 
