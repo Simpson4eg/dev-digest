@@ -5,6 +5,7 @@ import { Icon, Avatar, Badge, Button, Tabs } from "@devdigest/ui";
 import { RunReviewDropdown } from "../RunReviewDropdown";
 import { s } from "./styles";
 import type { PrDetail } from "@/lib/types";
+import { formatCost, formatTokensInOut } from "@/lib/cost";
 
 interface PrDetailHeaderProps {
   pr: PrDetail;
@@ -75,6 +76,14 @@ export function PrDetailHeader({
             <Badge dot bg="transparent" color={statusColor}>
               {pr.status}
             </Badge>
+            {pr.last_run_cost_usd != null && (
+              <span className="mono tnum" style={{ color: "var(--text-muted)" }}>
+                {formatCost(pr.last_run_cost_usd)}
+                {pr.last_run_tokens_in != null && pr.last_run_tokens_out != null && (
+                  <> · {formatTokensInOut(pr.last_run_tokens_in, pr.last_run_tokens_out)}</>
+                )}
+              </span>
+            )}
           </div>
         </div>
         <div style={s.actions}>

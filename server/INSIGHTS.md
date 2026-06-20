@@ -19,7 +19,19 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 
 ## Codebase Patterns
 
+- 2026-06-20 · `multi_agent_runs` exists but has NO FK from `agent_runs` — group party runs by `ran_at` time window (60s), not by id.
+  evidence: `server/src/db/schema/runs.ts:8-50`
+  The `agent_runs` table has no `multi_agent_run_id` column; the relationship is implicit (created within ~seconds of each other under the same `pr_id`). Code that needs to roll up "the latest party" (e.g. PR-detail cost+tokens) sorts completed runs by `ran_at DESC`, takes the newest timestamp, then includes everything within ±60s of it. See `lastPartyStats` in `server/src/modules/pulls/routes.ts`. Do NOT assume a FK exists.
+
+- 2026-06-20 · New fields on `RunSummary` (Zod contract returned by repo) MUST be `.nullable().optional()`, not just `.nullable()` — repo layer can't fill them, service layer enriches.
+  evidence: `server/src/vendor/shared/contracts/trace.ts:94-114` + `server/src/modules/reviews/repository/run.repo.ts:51`
+  The repo returns `RunSummary[]` typed from the schema; if a field is required (even nullable), TS fails compilation because repo doesn't set it. Service `listRuns()` wraps the repo output and adds derived fields (cost_usd from PriceBook). Pattern: derived/enriched fields go `.nullable().optional()`; the service layer overwrites the optional.
+
 ## Tool & Library Notes
+
+- 2026-06-20 · Vendored shared contracts (`client/src/vendor/shared/contracts/`) are NOT synced by any script — edits to `server/src/vendor/shared/contracts/` require manual `cp` to the client copy.
+  evidence: `server/CLAUDE.md` do-not-touch + `client/src/vendor/shared/contracts/{trace,platform}.ts`
+  There is no `pnpm sync-shared` or similar. After editing a Zod schema on the server, `cp server/src/vendor/shared/contracts/<file>.ts client/src/vendor/shared/contracts/<file>.ts`. Otherwise client compiles against a stale shape and runtime parse silently strips your new field (per `fastify-type-provider-zod` serializer behavior). Same applies for any new file added to the contracts folder.
 
 ## Recurring Errors & Fixes
 
