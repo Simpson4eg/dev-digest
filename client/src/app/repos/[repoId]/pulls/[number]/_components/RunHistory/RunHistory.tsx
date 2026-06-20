@@ -193,22 +193,22 @@ export function RunHistory({
                 <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
                   {t("runStatus.findings", { count: r.findings_count ?? 0 })}
                   {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
-                  {(() => {
-                    const tokIn = r.tokens_in ?? 0;
-                    const tokOut = r.tokens_out ?? 0;
-                    const tot = tokIn + tokOut;
-                    if (tot === 0 && r.cost_usd == null) return null;
-                    return (
-                      <span className="mono tnum" style={{ marginLeft: 6 }}>
-                        · {formatTokenTotal(tot > 0 ? tot : null)} · {formatCost(r.cost_usd)}
-                      </span>
-                    );
-                  })()}
                 </div>
               )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}
+              {(() => {
+                const tokIn = r.tokens_in ?? 0;
+                const tokOut = r.tokens_out ?? 0;
+                const tot = tokIn + tokOut;
+                if (tot === 0 && r.cost_usd == null) return null;
+                return (
+                  <span className="mono tnum">
+                    {formatTokenTotal(tot > 0 ? tot : null)} · {formatCost(r.cost_usd)}
+                  </span>
+                );
+              })()}
             </div>
             <button
               type="button"

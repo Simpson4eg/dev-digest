@@ -76,15 +76,26 @@ export function PrDetailHeader({
             <Badge dot bg="transparent" color={statusColor}>
               {pr.status}
             </Badge>
-            {pr.last_run_cost_usd != null && (
-              <span className="mono tnum" style={{ color: "var(--text-muted)" }}>
-                {formatCost(pr.last_run_cost_usd)}
-                {pr.last_run_tokens_in != null && pr.last_run_tokens_out != null && (
-                  <> · {formatTokensInOut(pr.last_run_tokens_in, pr.last_run_tokens_out)}</>
-                )}
-              </span>
-            )}
           </div>
+          {pr.last_run_cost_usd != null && (
+            <div
+              className="mono tnum"
+              style={{
+                marginTop: 6,
+                fontSize: 12,
+                color: "var(--text-muted)",
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+              }}
+            >
+              <Icon.DollarSign size={12} />
+              {formatCost(pr.last_run_cost_usd)}
+              {pr.last_run_tokens_in != null && pr.last_run_tokens_out != null && (
+                <> · {formatTokensInOut(pr.last_run_tokens_in, pr.last_run_tokens_out)}</>
+              )}
+            </div>
+          )}
         </div>
         <div style={s.actions}>
           <Button
