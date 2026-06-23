@@ -38,7 +38,9 @@ const VERDICT_RANK: Record<string, number> = {
 
 /**
  * Merge N partial Reviews (one per mapped file/chunk) into a single Review:
- * concat findings, take the worst verdict, mean score, joined summaries.
+ * concat findings, take the worst verdict, mean score, summary from the
+ * worst-verdict chunk (joining all N summaries produces a wall of text when
+ * every "no issues" chunk contributes a near-identical sentence).
  */
 export function reduceReviews(partials: Review[]): Review {
   if (partials.length === 1) return partials[0]!;
@@ -50,7 +52,11 @@ export function reduceReviews(partials: Review[]): Review {
   const score = partials.length
     ? Math.round(partials.reduce((s, p) => s + p.score, 0) / partials.length)
     : 0;
-  const summary = partials.map((p) => p.summary).filter(Boolean).join(' ');
+  // Take the summary from the single worst-verdict chunk rather than joining all
+  // chunk summaries — joining N "no issues found" variants produces a wall of text.
+  const worstRank = VERDICT_RANK[verdict] ?? 0;
+  const summary =
+    partials.find((p) => (VERDICT_RANK[p.verdict] ?? 0) === worstRank)?.summary ?? '';
   return { verdict, score, summary, findings };
 }
 
