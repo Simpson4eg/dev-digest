@@ -29,6 +29,9 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 
 ## Tool & Library Notes
 
+- 2026-06-23 · OpenAI SDK 4.x requires `fetch: globalThis.fetch` in the constructor on Node 22+/24 — otherwise its bundled node-fetch v2 shim causes "Premature close" · evidence: `server/src/adapters/llm/openai.ts:52`
+  The SDK bypasses Node's native fetch (undici) even on Node 22+ and falls back to its own node-fetch v2.7.0 shim, which has a bug reading chunked HTTP responses. Any `new OpenAI({...})` call here must include `fetch: globalThis.fetch`. See reviewer-core/INSIGHTS.md for the full diagnosis path.
+
 - 2026-06-20 · Vendored shared contracts (`client/src/vendor/shared/contracts/`) are NOT synced by any script — edits to `server/src/vendor/shared/contracts/` require manual `cp` to the client copy.
   evidence: `server/CLAUDE.md` do-not-touch + `client/src/vendor/shared/contracts/{trace,platform}.ts`
   There is no `pnpm sync-shared` or similar. After editing a Zod schema on the server, `cp server/src/vendor/shared/contracts/<file>.ts client/src/vendor/shared/contracts/<file>.ts`. Otherwise client compiles against a stale shape and runtime parse silently strips your new field (per `fastify-type-provider-zod` serializer behavior). Same applies for any new file added to the contracts folder.
