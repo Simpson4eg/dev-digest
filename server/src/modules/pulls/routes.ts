@@ -8,7 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
-import { runCostUsd, sumRunCostUsd } from '../reviews/cost.js';
+import { sumRunCostUsd } from '../reviews/cost.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
