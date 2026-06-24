@@ -174,6 +174,13 @@ export const PrMeta = z.object({
    *  Computed on read from tokens × model price; null until any run completes
    *  with known-priced tokens. UI renders "—" for null (never "$0.00"). */
   cost_usd: z.number().nullable().optional(),
+  /** Aggregate finding counts by severity across all reviews (list endpoint only).
+   *  Null until at least one review run has produced findings. */
+  findings_summary: z.object({
+    critical: z.number().int(),
+    warning: z.number().int(),
+    suggestion: z.number().int(),
+  }).nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

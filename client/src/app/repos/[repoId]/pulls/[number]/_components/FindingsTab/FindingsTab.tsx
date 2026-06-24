@@ -9,6 +9,62 @@ import { s } from "./styles";
 import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
 import type { UseMutationResult } from "@tanstack/react-query";
 
+type Severity = "CRITICAL" | "WARNING" | "SUGGESTION";
+
+const SEVERITY_COLOR: Record<Severity, string> = {
+  CRITICAL: "var(--crit)",
+  WARNING: "var(--warn)",
+  SUGGESTION: "var(--sugg)",
+};
+
+const SEVERITIES: Severity[] = ["CRITICAL", "WARNING", "SUGGESTION"];
+
+function SeverityBar({
+  counts,
+  active,
+  onToggle,
+}: {
+  counts: Record<Severity, number>;
+  active: Severity | null;
+  onToggle: (sev: Severity) => void;
+}) {
+  const visible = SEVERITIES.filter((s) => counts[s] > 0);
+  if (visible.length === 0) return null;
+
+  return (
+    <div style={s.severityBar}>
+      {visible.map((sev, i) => {
+        const color = SEVERITY_COLOR[sev];
+        const isActive = active === sev;
+        return (
+          <React.Fragment key={sev}>
+            {i > 0 && <span style={s.severitySep}>·</span>}
+            <button
+              onClick={() => onToggle(sev)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "3px 9px",
+                borderRadius: 14,
+                border: "none",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+                color,
+                background: isActive ? `${color}1a` : "transparent",
+                transition: "background 0.15s",
+              }}
+            >
+              {counts[sev]} {sev}
+            </button>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 interface FindingsTabProps {
   prId: string | null;
   liveRunIds: string[];
@@ -41,6 +97,8 @@ export function FindingsTab({
   onDelete,
   onRunDone,
 }: FindingsTabProps) {
+  const [activeSeverity, setActiveSeverity] = React.useState<Severity | null>(null);
+
   const handleCancelAll = useCallback(() => {
     liveRunIds.forEach((id) => cancelMutation.mutate(id));
   }, [liveRunIds, cancelMutation]);
@@ -70,6 +128,20 @@ export function FindingsTab({
   const handleGoToReview = useCallback((runId: string) => {
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
+
+  const handleToggleSeverity = useCallback((sev: Severity) => {
+    setActiveSeverity((prev) => (prev === sev ? null : sev));
+  }, []);
+
+  const severityCounts = React.useMemo(() => {
+    const counts: Record<Severity, number> = { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 };
+    for (const run of runs) {
+      for (const f of run.findings) {
+        if (f.severity in counts) counts[f.severity as Severity]++;
+      }
+    }
+    return counts;
+  }, [runs]);
 
   return (
     <section>
@@ -144,6 +216,13 @@ export function FindingsTab({
       >
         Review runs
       </SectionLabel>
+      {runs.length > 0 && (
+        <SeverityBar
+          counts={severityCounts}
+          active={activeSeverity}
+          onToggle={handleToggleSeverity}
+        />
+      )}
       {runs.length === 0 ? (
         reviewRunning || liveRunIds.length > 0 ? null : (
           <EmptyState
@@ -164,6 +243,7 @@ export function FindingsTab({
             headSha={headSha}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            severityFilter={activeSeverity}
           />
         ))
       )}

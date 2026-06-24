@@ -45,4 +45,17 @@ export const s = {
     display: "flex",
     gap: 8,
   } satisfies CSSProperties,
+  severityBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 14,
+    flexWrap: "wrap" as const,
+  } satisfies CSSProperties,
+  severitySep: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    userSelect: "none" as const,
+    padding: "0 2px",
+  } satisfies CSSProperties,
 } as const;
