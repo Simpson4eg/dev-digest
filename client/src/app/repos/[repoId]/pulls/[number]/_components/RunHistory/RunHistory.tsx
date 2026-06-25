@@ -4,6 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
 import type { RunSummary, PrCommit } from "@devdigest/shared";
+import { formatCost, formatTokenTotal } from "@/lib/cost";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -197,6 +198,17 @@ export function RunHistory({
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}
+              {(() => {
+                const tokIn = r.tokens_in ?? 0;
+                const tokOut = r.tokens_out ?? 0;
+                const tot = tokIn + tokOut;
+                if (tot === 0 && r.cost_usd == null) return null;
+                return (
+                  <span className="mono tnum">
+                    {formatTokenTotal(tot > 0 ? tot : null)} · {formatCost(r.cost_usd)}
+                  </span>
+                );
+              })()}
             </div>
             <button
               type="button"

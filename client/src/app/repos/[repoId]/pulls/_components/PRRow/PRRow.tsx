@@ -6,9 +6,36 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
+import { formatCost } from "@/lib/cost";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
+
+type FindingsSummary = NonNullable<PrMeta["findings_summary"]>;
+
+const SEV_COLOR = {
+  critical: "var(--crit)",
+  warning: "var(--warn)",
+  suggestion: "var(--sugg)",
+} as const;
+
+function FindingsChips({ summary }: { summary: FindingsSummary }) {
+  const parts: { label: string; color: string }[] = [];
+  if (summary.critical > 0) parts.push({ label: `${summary.critical} CRITICAL`, color: SEV_COLOR.critical });
+  if (summary.warning > 0) parts.push({ label: `${summary.warning} WARNING`, color: SEV_COLOR.warning });
+  if (summary.suggestion > 0) parts.push({ label: `${summary.suggestion} SUGGESTION`, color: SEV_COLOR.suggestion });
+  if (parts.length === 0) return <span style={s.muted}>—</span>;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+      {parts.map((p, i) => (
+        <React.Fragment key={p.color}>
+          {i > 0 && <span style={{ color: "var(--text-muted)", fontSize: 10 }}>·</span>}
+          <span style={{ color: p.color, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>{p.label}</span>
+        </React.Fragment>
+      ))}
+    </span>
+  );
+}
 
 export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const t = useTranslations("prReview");
@@ -16,7 +43,10 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const [h, setH] = React.useState(false);
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
-  const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
+  const reviewed = pr.score != null;
+  const hasFindings =
+    pr.findings_summary != null &&
+    (pr.findings_summary.critical + pr.findings_summary.warning + pr.findings_summary.suggestion) > 0;
   return (
     <div
       onMouseEnter={() => setH(true)}
@@ -53,10 +83,20 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
           <span style={s.muted}>—</span>
         )}
       </div>
+      <div style={{ display: "flex", alignItems: "center" }}>
+        {hasFindings ? (
+          <FindingsChips summary={pr.findings_summary!} />
+        ) : reviewed ? (
+          <span style={s.muted}>—</span>
+        ) : null}
+      </div>
       <div>
         <Badge dot color={st.c} bg="transparent">
           {t(`list.status.${st.labelKey}`)}
         </Badge>
+      </div>
+      <div style={pr.cost_usd == null ? { ...s.costCell, ...s.muted } : s.costCell}>
+        {formatCost(pr.cost_usd)}
       </div>
       <div style={s.updatedCell}>{relativeTime(pr.updated_at)}</div>
     </div>

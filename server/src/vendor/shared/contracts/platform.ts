@@ -170,6 +170,17 @@ export const PrMeta = z.object({
   updated_at: z.string().nullish(),
   // Latest-review score (list endpoint only; null/absent until reviewed).
   score: z.number().int().nullish(),
+  /** Cumulative USD across ALL completed agent_runs for this PR ("sunk cost").
+   *  Computed on read from tokens × model price; null until any run completes
+   *  with known-priced tokens. UI renders "—" for null (never "$0.00"). */
+  cost_usd: z.number().nullable().optional(),
+  /** Aggregate finding counts by severity across all reviews (list endpoint only).
+   *  Null until at least one review run has produced findings. */
+  findings_summary: z.object({
+    critical: z.number().int(),
+    warning: z.number().int(),
+    suggestion: z.number().int(),
+  }).nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 
@@ -202,6 +213,12 @@ export const PrDetail = PrMeta.extend({
   files: z.array(PrFile),
   commits: z.array(PrCommit),
   linked_issue: IssueMeta.nullish(),
+  /** Latest-party token + cost rollup for the verdict bar
+   *  ("$0.014 · 8.2K→1.3K"). A "party" = the most recent batch of completed
+   *  runs grouped by ran_at within a small window. Null until any run is done. */
+  last_run_cost_usd: z.number().nullable().optional(),
+  last_run_tokens_in: z.number().int().nullable().optional(),
+  last_run_tokens_out: z.number().int().nullable().optional(),
 });
 export type PrDetail = z.infer<typeof PrDetail>;
 

@@ -45,6 +45,12 @@ export const s = {
     color: "var(--text-muted)",
     textAlign: "right",
   } satisfies CSSProperties,
+  costCell: {
+    fontSize: 13,
+    textAlign: "right",
+    fontVariantNumeric: "tabular-nums",
+    color: "var(--text-secondary)",
+  } satisfies CSSProperties,
   muted: { color: "var(--text-muted)" } satisfies CSSProperties,
   filterBar: {
     display: "flex",

@@ -2,48 +2,36 @@
 
 The DevDigest UI: import repos, browse pull requests, run and read AI reviews,
 and author agents. App Router + React Server/Client components, data via
-**TanStack Query** hooks over the Fastify API. (This is the starter surface;
-course lessons add the Skills, Memory, Eval, Blast/Brief, multi-agent, CI, and
-dashboard screens.)
+**TanStack Query** hooks over the Fastify API.
 
-- **Stack:** Next.js 15 (App Router), React 19, TanStack Query, `next-intl`
-  (messages in `messages/<locale>/*.json`), `recharts`, `mermaid`,
-  `react-markdown`. UI primitives are vendored under `src/vendor/ui`
-  (`@devdigest/ui`) and shared Zod contracts under `src/vendor/shared`
-  (`@devdigest/shared`).
-- **API base:** `NEXT_PUBLIC_API_BASE` (default `http://localhost:3001`), used by
-  `src/lib/api.ts`. Every data hook lives in `src/lib/hooks/*`.
-- **Run:** `pnpm dev` (`:3000`). **Test:** `pnpm test` (vitest + jsdom, fetch
-  mocked — no API needed). **Typecheck:** `pnpm typecheck`.
+**Stack:** Next.js 15, React 19, TanStack Query, `next-intl`, `recharts`,
+`mermaid`, `react-markdown`. UI primitives vendored at `src/vendor/ui`; Zod
+contracts vendored at `src/vendor/shared` (read-only copy of the server's).
 
-## UI route map
+## Quick start
 
-Routes (`src/app/**/page.tsx`) and the API surface each leans on (via
-`src/lib/hooks/*` → `src/lib/api.ts`):
-
-```mermaid
-flowchart TD
-  ROOT["/"] -->|"useRepos → GET /repos"| PULLS["/repos/:repoId/pulls<br/>PR list"]
-  ONB["/onboarding<br/>add repo"] -->|"POST /repos"| API[("Fastify API")]
-  PULLS --> PR["/pulls/:number<br/>review detail<br/>(overview · diff · findings)"]
-
-  AGENTS["/agents"] --> AGENT["/agents/:id<br/>editor (config)"]
-  SETTINGS["/settings/:section<br/>API keys · models"]
-
-  PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
-  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments<br/>POST /pulls/:id/review · /findings/:id/(accept|dismiss)"| API
-  AGENTS -->|"/agents · /agents/:id"| API
-  SETTINGS -->|"/settings · /providers"| API
+```sh
+pnpm install
+pnpm dev          # :3000
 ```
 
-Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,
-`g`-then-key shortcuts). Pages are thin; feature logic sits in colocated
-`_components/<Name>/` folders, each with its own `*.test.tsx`.
+`NEXT_PUBLIC_API_BASE` (default `http://localhost:3001`) points at the API.
 
-## Testing
+`pnpm test` (vitest + jsdom, fetch mocked — no API or browser needed) ·
+`pnpm typecheck` · `pnpm build`.
 
-Component/interaction tests (`*.test.tsx`) run under vitest + jsdom with `fetch`
-mocked, so they need neither the API nor a browser. The real browser journeys
-(client + API + seeded DB) are covered by the deterministic agent-browser suite
-in [`../e2e`](../e2e/README.md) and the `e2e-web.yml` workflow. See
-[`../TESTING.md`](../TESTING.md).
+## Where to look
+
+- **For agents / contributors:** [`CLAUDE.md`](./CLAUDE.md) (stack, layout,
+  conventions, gotchas, do-not-touch).
+- **How-to** in [`docs/`](./docs/):
+  - [`setup.md`](./docs/setup.md) — env + API base URL
+  - [`state-management.md`](./docs/state-management.md) — TanStack Query patterns
+  - [`i18n.md`](./docs/i18n.md) — next-intl conventions
+  - [`routing.md`](./docs/routing.md) — App Router + `_components/`
+- **Contracts** in [`specs/`](./specs/):
+  - [`api-consumption.md`](./specs/api-consumption.md) — wiring Zod into requests
+  - [`route-map.md`](./specs/route-map.md) — routes ↔ endpoints
+
+Browser journeys are covered by [`../e2e`](../e2e/README.md). See
+[`../TESTING.md`](../TESTING.md) for the suite split.

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
@@ -8,6 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import { sumRunCostUsd } from '../reviews/cost.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -113,8 +114,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
 
     // Latest-review SCORE per PR for the list's score ring. Computed on read
     // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // grouping is cheap.
     const prIds = rows.map((r) => r.id);
     const latestReviewByPr = new Map<string, { score: number | null }>();
     if (prIds.length > 0) {
@@ -129,9 +129,51 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    // FINDINGS SUMMARY per PR: severity counts across all reviews (for the list badge).
+    const findingsSummaryByPr = new Map<string, { critical: number; warning: number; suggestion: number }>();
+    if (prIds.length > 0) {
+      const findingRows = await container.db
+        .select({ prId: t.reviews.prId, severity: t.findings.severity, cnt: count() })
+        .from(t.findings)
+        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+        .where(inArray(t.reviews.prId, prIds))
+        .groupBy(t.reviews.prId, t.findings.severity);
+      for (const row of findingRows) {
+        const entry = findingsSummaryByPr.get(row.prId) ?? { critical: 0, warning: 0, suggestion: 0 };
+        if (row.severity === 'CRITICAL') entry.critical = Number(row.cnt);
+        else if (row.severity === 'WARNING') entry.warning = Number(row.cnt);
+        else if (row.severity === 'SUGGESTION') entry.suggestion = Number(row.cnt);
+        findingsSummaryByPr.set(row.prId, entry);
+      }
+    }
+
+    // Cumulative cost ("sunk cost") per PR: sum across ALL non-running agent
+    // runs. Computed on read via PriceBook — never persisted, never stale.
+    // One IN-query keeps the list O(1) round-trips like the score lookup above.
+    const runsByPr = new Map<string, { model: string | null; tokensIn: number | null; tokensOut: number | null }[]>();
+    if (prIds.length > 0) {
+      const runRows = await container.db
+        .select({
+          prId: t.agentRuns.prId,
+          model: t.agentRuns.model,
+          tokensIn: t.agentRuns.tokensIn,
+          tokensOut: t.agentRuns.tokensOut,
+        })
+        .from(t.agentRuns)
+        .where(inArray(t.agentRuns.prId, prIds));
+      for (const r of runRows) {
+        if (!r.prId) continue;
+        const arr = runsByPr.get(r.prId) ?? [];
+        arr.push({ model: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut });
+        runsByPr.set(r.prId, arr);
+      }
+    }
+
     const now = Date.now();
+    const pb = container.priceBook;
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
+      const prRuns = runsByPr.get(r.id) ?? [];
       return {
         id: r.id,
         number: r.number,
@@ -153,9 +195,52 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        cost_usd: sumRunCostUsd(prRuns, pb),
+        findings_summary: findingsSummaryByPr.get(r.id) ?? null,
       };
     });
   });
+
+  /**
+   * Last-party stats for the verdict-bar cost label ("$0.014 · 8.2K→1.3K").
+   * A "party" = the latest batch of completed runs grouped within 60s of each
+   * other on `ran_at` (the schema has no review_id FK on agent_runs, so we
+   * cluster by time). Failed/cancelled/running runs are excluded.
+   * Returns {cost: null, in: null, out: null} when no party exists yet.
+   */
+  async function lastPartyStats(prId: string): Promise<{
+    cost_usd: number | null;
+    tokens_in: number | null;
+    tokens_out: number | null;
+  }> {
+    const runs = await container.db
+      .select({
+        ranAt: t.agentRuns.ranAt,
+        model: t.agentRuns.model,
+        tokensIn: t.agentRuns.tokensIn,
+        tokensOut: t.agentRuns.tokensOut,
+      })
+      .from(t.agentRuns)
+      .where(and(eq(t.agentRuns.prId, prId), eq(t.agentRuns.status, 'done')))
+      .orderBy(desc(t.agentRuns.ranAt));
+    if (runs.length === 0) {
+      return { cost_usd: null, tokens_in: null, tokens_out: null };
+    }
+    const latestTs = runs[0]!.ranAt!.getTime();
+    const PARTY_WINDOW_MS = 60_000;
+    const party = runs.filter((r) => latestTs - r.ranAt!.getTime() <= PARTY_WINDOW_MS);
+    const tokensIn = party.reduce((s, r) => s + (r.tokensIn ?? 0), 0);
+    const tokensOut = party.reduce((s, r) => s + (r.tokensOut ?? 0), 0);
+    const cost = sumRunCostUsd(
+      party.map((r) => ({ model: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut })),
+      container.priceBook,
+    );
+    return {
+      cost_usd: cost,
+      tokens_in: tokensIn === 0 ? null : tokensIn,
+      tokens_out: tokensOut === 0 ? null : tokensOut,
+    };
+  }
 
   app.get('/pulls/:id', { schema: { params: IdParams } }, async (req): Promise<PrDetail> => {
     const { workspaceId } = await getContext(container, req);
@@ -171,6 +256,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       .from(t.repos)
       .where(eq(t.repos.id, pr.repoId));
     if (!repo) throw new NotFoundError('Repo not found');
+    const party = await lastPartyStats(pr.id);
 
     // Local-first: refresh detail from GitHub when a token is configured;
     // otherwise serve the persisted files/commits/body (seeded or previously
@@ -215,7 +301,13 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         })
         .where(eq(t.pullRequests.id, pr.id));
 
-      return { ...detail, id: pr.id };
+      return {
+        ...detail,
+        id: pr.id,
+        last_run_cost_usd: party.cost_usd,
+        last_run_tokens_in: party.tokens_in,
+        last_run_tokens_out: party.tokens_out,
+      };
     } catch (err) {
       app.log.warn({ err }, 'GitHub PR detail refresh skipped (no token / offline); serving persisted detail');
       const files = await container.db.select().from(t.prFiles).where(eq(t.prFiles.prId, pr.id));
@@ -247,6 +339,9 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
           author: c.author,
           committed_at: c.committedAt?.toISOString() ?? null,
         })),
+        last_run_cost_usd: party.cost_usd,
+        last_run_tokens_in: party.tokens_in,
+        last_run_tokens_out: party.tokens_out,
       };
     }
   });

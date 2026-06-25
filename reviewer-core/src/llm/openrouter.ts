@@ -53,6 +53,10 @@ export class OpenRouterProvider implements LLMProvider {
       baseURL: this.baseURL,
       timeout: opts.timeoutMs ?? 90_000,
       maxRetries: opts.maxRetries ?? 2,
+      // node-fetch v2 (the SDK's default shim) fails on Node 22+ with OpenRouter's
+      // chunked responses — it gets a 200 but throws "Premature close" reading the
+      // body. Force the SDK to use Node's native fetch (undici) instead.
+      fetch: globalThis.fetch,
     });
   }
 

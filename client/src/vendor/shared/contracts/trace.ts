@@ -41,9 +41,10 @@ export const PromptAssembly = z.object({
   skills: z.string().nullish(),
   memory: z.string().nullish(),
   specs: z.string().nullish(),
-  /** Callers-of-changed-symbols digest (repo-intel); null when absent. */
+  /** Callers-of-changed-symbols digest (T1.3); null when absent. */
   callers: z.string().nullish(),
-  /** Repo skeleton / map (repo-intel); null when absent. */
+  /** Repo skeleton / map (T3); null when absent. Enables per-slot token
+      attribution in the run trace. */
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
@@ -63,6 +64,9 @@ export const RunStats = z.object({
   tokens_out: z.number().int(),
   findings: z.number().int(),
   grounding: z.string(),
+  /** USD cost, computed from tokens × model price at read time. Null when the
+   *  model isn't in PriceBook or no tokens were recorded — UI renders "—". */
+  cost_usd: z.number().nullable().optional(),
 });
 export type RunStats = z.infer<typeof RunStats>;
 
@@ -109,5 +113,10 @@ export const RunSummary = z.object({
   // findings that trip the agent's gate. Null on failed/cancelled runs.
   score: z.number().int().nullable(),
   blockers: z.number().int().nullable(),
+  /** USD cost computed on read from tokens × model price. Null when the
+   *  model is unknown to PriceBook or tokens are missing/zero. Optional on
+   *  the wire so the repo layer (which doesn't know about PriceBook) can omit
+   *  it and the service layer fills it in during enrichment. */
+  cost_usd: z.number().nullable().optional(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
