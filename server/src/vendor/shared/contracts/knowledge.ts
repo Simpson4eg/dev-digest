@@ -131,6 +131,48 @@ export const Skill = z.object({
 });
 export type Skill = z.infer<typeof Skill>;
 
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int().positive(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+/** Parsed import data returned before the user confirms persistence. */
+export const SkillImportPreview = z.object({
+  name: z.string(),
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+  source_file: z.string(),
+  ignored_files: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
+
+export const SkillStats = z.object({
+  window_days: z.number().int().positive(),
+  used_by_agents: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      enabled: z.boolean(),
+    }),
+  ),
+  runs_with_skill: z.number().int().nonnegative(),
+  traced_runs: z.number().int().nonnegative(),
+  pull_frequency: z.number().min(0).max(1).nullable(),
+  findings: z.number().int().nonnegative(),
+  accepted: z.number().int().nonnegative(),
+  dismissed: z.number().int().nonnegative(),
+  accept_rate: z.number().min(0).max(1).nullable(),
+  findings_by_category: z.array(
+    z.object({ category: z.string(), count: z.number().int().nonnegative() }),
+  ),
+});
+export type SkillStats = z.infer<typeof SkillStats>;
+
 export const CommunitySkill = z.object({
   name: z.string(),
   repo: z.string(),
@@ -188,6 +230,7 @@ export const Agent = z.object({
   // Inject repo-intel context (repo skeleton + callers + rank note) into this
   // agent's review prompt. Default on; gated again by the global flag.
   repo_intel: z.boolean().default(true),
+  skill_count: z.number().int().nonnegative().optional(),
 });
 export type Agent = z.infer<typeof Agent>;
 

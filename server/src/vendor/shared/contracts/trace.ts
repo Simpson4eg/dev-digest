@@ -39,6 +39,8 @@ export type ToolCall = z.infer<typeof ToolCall>;
 export const PromptAssembly = z.object({
   system: z.string(),
   skills: z.string().nullish(),
+  /** Token contribution of the rendered skills block, counted server-side. */
+  skill_tokens: z.number().int().nonnegative().nullish(),
   memory: z.string().nullish(),
   specs: z.string().nullish(),
   /** Callers-of-changed-symbols digest (T1.3); null when absent. */
@@ -79,6 +81,15 @@ export const RunTrace = z.object({
     model: z.string(),
     pr: z.number().int().nullish(),
     source: z.enum(['local', 'ci']).default('local'),
+    skills: z
+      .array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          version: z.number().int().positive(),
+        }),
+      )
+      .optional(),
   }),
   stats: RunStats,
   prompt_assembly: PromptAssembly,

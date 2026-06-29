@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
 import { eq, and } from 'drizzle-orm';
@@ -6,6 +8,7 @@ import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
+  TEST_QUALITY_REVIEWER_PROMPT,
 } from './seed-prompts.js';
 
 /** Default provider/model for the built-in reviewer agents. */
@@ -18,10 +21,11 @@ const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
  *
  * Seeds: default workspace + system user + membership, default settings,
  * demo repo (acme/payments-api), PR #482 with files/commits, a sample review
- * with a few findings, and the three built-in agents (General + Security +
- * Performance), all on the default openrouter/deepseek-v4-flash provider+model.
+ * with a few findings, the three core reviewer agents, and the Test Quality
+ * Reviewer with its reusable skills. Agents use the default
+ * openrouter/deepseek-v4-flash provider+model.
  *
- * Course lessons populate the other tables (skills, conventions, memory, eval,
+ * Course lessons populate the remaining tables (conventions, memory, eval,
  * …) once their features are built — they start empty here.
  */
 
@@ -175,7 +179,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     ]);
   }
 
-  // ---- built-in agents (the three starter presets) ----
+  // ---- built-in agents (the three core presets) ----
   // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).
   const seedAgents: Array<typeof t.agents.$inferInsert> = [
     {
@@ -220,11 +224,135 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     if (!existing) await db.insert(t.agents).values(a);
   }
 
+  // ---- test-quality reviewer + reusable skills ----
+  // Existing rows are intentionally left untouched: seed must not overwrite a
+  // user's edited skill body or reattach a skill they deliberately removed.
+  const testQualitySkills = [
+    {
+      name: 'edge-case-coverage',
+      description:
+        'Check changed behavior for missing boundary, failure-path, and concurrency coverage.',
+      type: 'rubric' as const,
+      source: 'manual' as const,
+      enabled: true,
+      body: `# Edge-case coverage
+
+Compare every changed behavior with the tests in the diff. Check for:
+
+- empty, null, zero, minimum, maximum, and just-outside-boundary inputs;
+- pagination boundaries and empty result sets;
+- rejected promises, timeouts, retries, and error responses;
+- concurrent calls, duplicate events, cleanup, and cancellation where relevant.
+
+Report only a concrete missing case tied to a changed branch or behavior. Do not ask
+for exhaustive permutations when one representative boundary proves the contract.`,
+    },
+    {
+      name: 'mock-overuse-gate',
+      description:
+        'Flag mocks that hide the behavior under test or make assertions pass without exercising real logic.',
+      type: 'custom' as const,
+      source: 'manual' as const,
+      enabled: true,
+      body: `# Mock overuse gate
+
+Flag a test when its mocks prevent it from proving the behavior it claims to test:
+
+- the module or function under test is itself mocked;
+- every collaborator is mocked, so integration assumptions are never exercised;
+- a database or provider mock accepts states that the real dependency rejects;
+- the important interaction or resulting state is never asserted;
+- spies, fake timers, environment variables, or globals are not restored.
+
+Focused mocks at a real system boundary are valid. Explain the exact behavior hidden
+by a mock instead of objecting to mocking in general.`,
+    },
+    {
+      name: 'uncovered-branches',
+      description:
+        'Map changed control-flow branches to tests and identify meaningful paths with no assertion.',
+      type: 'rubric' as const,
+      source: 'manual' as const,
+      enabled: true,
+      body: `# Uncovered branches
+
+Map tests in the diff to changed control flow, including:
+
+- if/else, ternary, and switch alternatives;
+- guards and early returns;
+- catch blocks, rejected promises, and non-success responses;
+- fallback and default behavior.
+
+Do not report a missing branch from filenames or coverage guesses alone. Cite the
+exact changed branch and state which input or dependency outcome reaches it.`,
+    },
+  ];
+
+  const testQualitySkillIds: string[] = [];
+  for (const skill of testQualitySkills) {
+    const [existing] = await db
+      .select({ id: t.skills.id })
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, skill.name)));
+
+    if (existing) {
+      testQualitySkillIds.push(existing.id);
+      continue;
+    }
+
+    const createdId = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(t.skills)
+        .values({ workspaceId, ...skill, version: 1 })
+        .returning({ id: t.skills.id });
+      await tx
+        .insert(t.skillVersions)
+        .values({ skillId: created!.id, version: 1, body: skill.body });
+      return created!.id;
+    });
+    testQualitySkillIds.push(createdId);
+  }
+
+  const [existingTestQualityAgent] = await db
+    .select({ id: t.agents.id })
+    .from(t.agents)
+    .where(
+      and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, 'Test Quality Reviewer')),
+    );
+
+  if (!existingTestQualityAgent) {
+    await db.transaction(async (tx) => {
+      const [agent] = await tx
+        .insert(t.agents)
+        .values({
+          workspaceId,
+          name: 'Test Quality Reviewer',
+          description: 'Reviews PRs for coverage gaps, mock overuse, and flaky test patterns.',
+          provider: DEFAULT_PROVIDER,
+          model: DEFAULT_MODEL,
+          systemPrompt: TEST_QUALITY_REVIEWER_PROMPT,
+          enabled: true,
+          version: 1,
+          createdBy: userId,
+        })
+        .returning({ id: t.agents.id });
+
+      await tx.insert(t.agentSkills).values(
+        testQualitySkillIds.map((skillId, order) => ({
+          agentId: agent!.id,
+          skillId,
+          order,
+        })),
+      );
+    });
+  }
+
   return { workspaceId, userId };
 }
 
 // CLI entrypoint
-if (import.meta.url === `file://${process.argv[1]}`) {
+const entrypoint = process.argv[1];
+if (entrypoint && import.meta.url === pathToFileURL(resolve(entrypoint)).href) {
   const url = process.env.DATABASE_URL;
   if (!url) {
     console.error('DATABASE_URL is required');

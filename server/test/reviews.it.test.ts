@@ -212,6 +212,56 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     await app.close();
   });
 
+  it('assembles linked enabled skills in order and omits globally disabled skills', async () => {
+    const app = await appWith(REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Skilled', provider: 'openai', model: 'gpt-4.1', system_prompt: 'review' },
+      })
+    ).json();
+    const createSkill = async (name: string, enabled: boolean) =>
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/skills',
+          payload: { name, description: `Apply ${name}.`, type: 'custom', body: `Instruction from ${name}.`, enabled },
+        })
+      ).json();
+    const later = await createSkill('later-skill', true);
+    const first = await createSkill('first-skill', true);
+    const disabled = await createSkill('disabled-skill', false);
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/skills`,
+      payload: { skill_ids: [first.id, disabled.id, later.id] },
+    });
+
+    const started = await app.inject({
+      method: 'POST',
+      url: `/pulls/${pr.id}/review`,
+      payload: { agentId: agent.id },
+    });
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    const trace = (
+      await app.inject({ method: 'GET', url: `/runs/${started.json().runs[0].run_id}/trace` })
+    ).json();
+    expect(trace.prompt_assembly.skills).toContain('first-skill');
+    expect(trace.prompt_assembly.skills).toContain('later-skill');
+    expect(trace.prompt_assembly.skills).not.toContain('disabled-skill');
+    expect(trace.prompt_assembly.skills.indexOf('first-skill')).toBeLessThan(
+      trace.prompt_assembly.skills.indexOf('later-skill'),
+    );
+    expect(trace.prompt_assembly.skill_tokens).toBeGreaterThan(0);
+    expect(trace.config.skills.map((skill: { name: string }) => skill.name)).toEqual([
+      'first-skill',
+      'later-skill',
+    ]);
+    await app.close();
+  });
+
   it('dual-provider structured output: anthropic provider returns the same Review shape', async () => {
     const app = await appWith(REVIEW_FIXTURE, 'anthropic');
     const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);

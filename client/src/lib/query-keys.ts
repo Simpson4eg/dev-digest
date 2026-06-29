@@ -25,12 +25,21 @@ export const qk = {
   // ---- agents ----
   agents: () => ["agents"] as const,
   agent: (id: string | null | undefined) => ["agent", id] as const,
+  allAgentSkills: () => ["agent-skills"] as const,
+  agentSkills: (id: string | null | undefined) => ["agent-skills", id] as const,
   /** All provider-model lists — use as an invalidation *prefix* (matches every
       `providerModelsFor(provider)` key). */
   providerModels: () => ["provider-models"] as const,
   /** Model list for one provider. Prefixed by `providerModels()`. */
   providerModelsFor: (provider: string | null | undefined) =>
     ["provider-models", provider] as const,
+
+  // ---- skills ----
+  skills: () => ["skills"] as const,
+  skill: (id: string | null | undefined) => ["skill", id] as const,
+  skillVersions: (id: string | null | undefined) => ["skill-versions", id] as const,
+  allSkillStats: () => ["skill-stats"] as const,
+  skillStats: (id: string | null | undefined) => ["skill-stats", id] as const,
 
   // ---- reviews / runs ----
   prActiveRuns: (prId: string | null | undefined) => ["pr-active-runs", prId] as const,

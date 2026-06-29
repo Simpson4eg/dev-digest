@@ -149,6 +149,7 @@ export class ReviewRunExecutor {
     // events are already in this run's buffer, so the persisted trace below
     // (built from the buffer) includes them too.
     const runLog = parentLog.forRun(runId, { agent: agent.name });
+    let appliedSkills: { id: string; name: string; version: number; body: string }[] = [];
 
     runLog.info(`Starting review with agent "${agent.name}" (${agent.provider}/${agent.model})`);
 
@@ -159,6 +160,24 @@ export class ReviewRunExecutor {
         `Resolving ${agent.provider} provider`,
         () => this.container.llm(agent.provider as Provider),
         { kind: 'tool' },
+      );
+
+      const linkedSkills = await runLog.step(
+        'Loading linked skills',
+        () => this.agents.linkedSkills(workspaceId, agent.id),
+        { kind: 'tool' },
+      );
+      appliedSkills = linkedSkills
+        .filter((link) => link.skill.enabled)
+        .map((link) => ({
+          id: link.skill.id,
+          name: link.skill.name,
+          version: link.skill.version,
+          body: `## Skill: ${link.skill.name} (v${link.skill.version})\n${link.skill.body}`,
+        }));
+      const disabledCount = linkedSkills.length - appliedSkills.length;
+      runLog.info(
+        `Skills: ${appliedSkills.length} enabled in prompt${disabledCount > 0 ? `, ${disabledCount} globally disabled` : ''}`,
       );
 
       // Per-agent repo-intel toggle (Agent editor). When an agent opts out we
@@ -192,6 +211,7 @@ export class ReviewRunExecutor {
         model: agent.model,
         diff,
         llm,
+        ...(appliedSkills.length > 0 ? { skills: appliedSkills.map((skill) => skill.body) } : {}),
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
@@ -260,6 +280,7 @@ export class ReviewRunExecutor {
           model: agent.model,
           pr: pull.number,
           source: 'local',
+          skills: appliedSkills.map(({ id, name, version }) => ({ id, name, version })),
         },
         stats: {
           duration_ms: durationMs,
@@ -268,7 +289,12 @@ export class ReviewRunExecutor {
           findings: findingRows.length,
           grounding,
         },
-        prompt_assembly: outcome.assembly,
+        prompt_assembly: {
+          ...outcome.assembly,
+          skill_tokens: outcome.assembly.skills
+            ? this.container.tokenizer.count(outcome.assembly.skills)
+            : 0,
+        },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
           args: c.label,

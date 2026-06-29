@@ -8,7 +8,7 @@ import { Button, Icon, Modal } from "@devdigest/ui";
 import { s } from "@/app/repos/[repoId]/pulls/[number]/_components/trace/RunTraceDrawer/styles";
 import { PromptModalBody } from "../PromptModalBody";
 
-export function PromptBlock({ label, text, color }: { label: string; text: string; color: string }) {
+export function PromptBlock({ label, text, color, tokens }: { label: string; text: string; color: string; tokens?: number | null }) {
   const t = useTranslations("runs");
   const [open, setOpen] = React.useState(false);
   const [full, setFull] = React.useState(false);
@@ -23,6 +23,7 @@ export function PromptBlock({ label, text, color }: { label: string; text: strin
       <div onClick={() => setOpen((o) => !o)} style={s.promptHead}>
         <span style={s.promptDot(color)} />
         <span style={s.promptLabel}>{label}</span>
+        {tokens != null && <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>{tokens.toLocaleString()} tokens</span>}
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           <button
             type="button"

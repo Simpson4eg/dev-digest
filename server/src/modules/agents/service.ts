@@ -10,6 +10,7 @@ import type {
 } from '@devdigest/shared';
 import { AgentsRepository } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
+import { ValidationError } from '../../platform/errors.js';
 
 /**
  * A2 — agents service. Business logic for the Agents tab + Agent Editor.
@@ -57,12 +58,21 @@ export class AgentsService {
 
   async list(workspaceId: string): Promise<Agent[]> {
     const rows = await this.repo.list(workspaceId);
-    return rows.map(toAgentDto);
+    return Promise.all(
+      rows.map(async (row) => ({
+        ...toAgentDto(row),
+        skill_count: (await this.repo.linkedSkills(workspaceId, row.id)).length,
+      })),
+    );
   }
 
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {
     const row = await this.repo.getById(workspaceId, id);
-    return row ? toAgentDto(row) : undefined;
+    if (!row) return undefined;
+    return {
+      ...toAgentDto(row),
+      skill_count: (await this.repo.linkedSkills(workspaceId, row.id)).length,
+    };
   }
 
   /** Delete an agent (and its versions/skill-links, via cascade). */
@@ -136,8 +146,8 @@ export class AgentsService {
   }
 
   /** Linked skills for an agent as AgentSkillLink[] (ordered). */
-  async skillLinks(agentId: string): Promise<AgentSkillLink[]> {
-    const links = await this.repo.linkedSkills(agentId);
+  async skillLinks(workspaceId: string, agentId: string): Promise<AgentSkillLink[]> {
+    const links = await this.repo.linkedSkills(workspaceId, agentId);
     return links.map((l) => ({ agent_id: agentId, skill_id: l.skill.id, order: l.order }));
   }
 
@@ -152,8 +162,20 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    if (new Set(skillIds).size !== skillIds.length) {
+      throw new ValidationError('skill_ids must not contain duplicates');
+    }
+    const skills = await this.repo.skillsByIds(workspaceId, skillIds);
+    if (skills.length !== skillIds.length) {
+      throw new ValidationError('Every skill must exist in the current workspace');
+    }
+    const current = await this.repo.skillIdsForAgent(workspaceId, agentId);
+    if (current.length === skillIds.length && current.every((id, i) => id === skillIds[i])) {
+      return this.skillLinks(workspaceId, agentId);
+    }
     await this.repo.setSkills(agentId, skillIds);
-    return this.skillLinks(agentId);
+    await this.repo.bumpVersion(workspaceId, agentId);
+    return this.skillLinks(workspaceId, agentId);
   }
 
   /** Link a single skill (append or set order) — additive to existing links. */
@@ -165,10 +187,12 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
-    const existing = await this.repo.linkedSkills(agentId);
-    const resolvedOrder = order ?? existing.length;
-    await this.repo.linkSkill(agentId, skillId, resolvedOrder);
-    return this.skillLinks(agentId);
+    const skill = await this.repo.skillsByIds(workspaceId, [skillId]);
+    if (skill.length !== 1) throw new ValidationError('Skill not found in the current workspace');
+    const existing = await this.repo.skillIdsForAgent(workspaceId, agentId);
+    const next = existing.filter((id) => id !== skillId);
+    next.splice(Math.max(0, Math.min(order ?? next.length, next.length)), 0, skillId);
+    return this.setSkills(workspaceId, agentId, next);
   }
 
   /**
