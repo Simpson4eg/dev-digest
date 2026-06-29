@@ -59,6 +59,14 @@ export const s = {
     gap: 10,
     flexShrink: 0,
   } satisfies CSSProperties,
+  lastRunCost: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "var(--text-muted)",
+    display: "flex",
+    gap: 6,
+    alignItems: "center",
+  } satisfies CSSProperties,
   staleBanner: {
     display: "flex",
     alignItems: "center",
