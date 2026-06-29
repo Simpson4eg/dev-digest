@@ -247,6 +247,8 @@ export type AgentSkillLink = z.infer<typeof AgentSkillLink>;
 // plus the ordered skill ids linked at snapshot time. Used for reproducibility
 // (eval replays a past version) and for surfacing an agent's edit history.
 export const AgentVersionConfig = z.object({
+  name: z.string().default(""),
+  description: z.string().default(""),
   provider: Provider,
   model: z.string(),
   system_prompt: z.string(),

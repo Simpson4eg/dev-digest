@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { qk } from "../query-keys";
-import type { Agent, AgentSkillLink, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
+import type { Agent, AgentSkillLink, AgentVersion, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
 
 export function useAgents() {
   return useQuery({
@@ -17,6 +17,14 @@ export function useAgent(id: string | null | undefined) {
   return useQuery({
     queryKey: qk.agent(id),
     queryFn: () => api.get<Agent>(`/agents/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useAgentVersions(id: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.agentVersions(id),
+    queryFn: () => api.get<AgentVersion[]>(`/agents/${id}/versions`),
     enabled: !!id,
   });
 }
@@ -89,6 +97,7 @@ export function useUpdateAgent() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: qk.agents() });
       qc.invalidateQueries({ queryKey: qk.allSkillStats() });
+      qc.invalidateQueries({ queryKey: qk.agentVersions(data.id) });
       qc.setQueryData(qk.agent(data.id), data);
     },
   });

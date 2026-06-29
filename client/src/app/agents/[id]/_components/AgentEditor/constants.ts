@@ -11,4 +11,5 @@ export interface EditorTab {
 export const TABS: readonly EditorTab[] = [
   { key: "config", labelKey: "editor.tabs.config", icon: "Settings" },
   { key: "skills", labelKey: "editor.tabs.skills", icon: "Sparkles" },
+  { key: "history", labelKey: "editor.tabs.history", icon: "History" },
 ];

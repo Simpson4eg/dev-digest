@@ -10,10 +10,11 @@ import { AppShell } from "@/components/app-shell";
 import { AgentCard } from "../_components/AgentCard";
 import { AgentEditor } from "./_components/AgentEditor";
 import { useAgents, useAgent, useUpdateAgent } from "@/lib/hooks/agents";
+import { useActiveRepo } from "@/lib/providers/repo-context";
 import { ApiError } from "@/lib/api";
 import { s } from "./styles";
 
-const VALID_TABS = ["config", "skills"];
+const VALID_TABS = ["config", "skills", "history"];
 
 export default function AgentEditorPage() {
   const params = useParams<{ id: string }>();
@@ -24,6 +25,7 @@ export default function AgentEditorPage() {
   const { data: agents } = useAgents();
   const { data: agent, isLoading, isError, error, refetch } = useAgent(id);
   const update = useUpdateAgent();
+  const { repoId } = useActiveRepo();
 
   const tab = VALID_TABS.includes(search.get("tab") ?? "") ? search.get("tab")! : "config";
   const setTab = (t: string) => {
@@ -101,7 +103,7 @@ export default function AgentEditorPage() {
               </Badge>
               {!agent.enabled && <Badge color="var(--text-muted)">disabled</Badge>}
               <div style={s.editorTitleSpacer}>
-                <Button kind="secondary" size="sm" icon="GitPullRequest" onClick={() => router.push("/")}>
+                <Button kind="secondary" size="sm" icon="GitPullRequest" onClick={() => router.push(repoId ? `/repos/${repoId}/pulls` : "/")}>
                   Run on a PR…
                 </Button>
               </div>

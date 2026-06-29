@@ -25,6 +25,7 @@ export const qk = {
   // ---- agents ----
   agents: () => ["agents"] as const,
   agent: (id: string | null | undefined) => ["agent", id] as const,
+  agentVersions: (id: string | null | undefined) => ["agent-versions", id] as const,
   allAgentSkills: () => ["agent-skills"] as const,
   agentSkills: (id: string | null | undefined) => ["agent-skills", id] as const,
   /** All provider-model lists — use as an invalidation *prefix* (matches every

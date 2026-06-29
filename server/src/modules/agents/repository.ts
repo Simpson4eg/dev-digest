@@ -153,6 +153,8 @@ export class AgentsRepository {
         agentId: row.id,
         version,
         configJson: {
+          name: row.name,
+          description: row.description,
           provider: row.provider,
           model: row.model,
           system_prompt: row.systemPrompt,
