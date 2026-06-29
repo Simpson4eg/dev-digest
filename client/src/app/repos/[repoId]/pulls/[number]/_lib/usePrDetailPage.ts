@@ -16,7 +16,7 @@ import {
   usePrRuns,
   useDeleteRun,
 } from "@/lib/hooks/reviews";
-import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
+import { useActiveRepo, useRepoNotFound } from "@/lib/providers/repo-context";
 import { qk } from "@/lib/query-keys";
 import { githubPrUrl } from "@/lib/github-urls";
 import type { FindingRecord } from "@devdigest/shared";

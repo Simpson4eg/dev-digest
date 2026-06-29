@@ -7,9 +7,9 @@ import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
 import { formatCost } from "@/lib/cost";
-import { SIZE_COLOR, STATUS_META } from "../../constants";
-import { relativeTime, sizeOf } from "../../helpers";
-import { s } from "../../styles";
+import { SIZE_COLOR, STATUS_META } from "@/app/repos/[repoId]/pulls/constants";
+import { relativeTime, sizeOf } from "@/app/repos/[repoId]/pulls/helpers";
+import { s } from "@/app/repos/[repoId]/pulls/styles";
 
 type FindingsSummary = NonNullable<PrMeta["findings_summary"]>;
 
@@ -26,11 +26,11 @@ function FindingsChips({ summary }: { summary: FindingsSummary }) {
   if (summary.suggestion > 0) parts.push({ label: `${summary.suggestion} SUGGESTION`, color: SEV_COLOR.suggestion });
   if (parts.length === 0) return <span style={s.muted}>—</span>;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+    <span style={s.findingsChips}>
       {parts.map((p, i) => (
         <React.Fragment key={p.color}>
-          {i > 0 && <span style={{ color: "var(--text-muted)", fontSize: 10 }}>·</span>}
-          <span style={{ color: p.color, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>{p.label}</span>
+          {i > 0 && <span style={s.findingChipSep}>·</span>}
+          <span style={s.findingChipLabel(p.color)}>{p.label}</span>
         </React.Fragment>
       ))}
     </span>
