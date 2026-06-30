@@ -50,4 +50,7 @@ export const qk = {
 
   // ---- run trace ----
   runTrace: (runId: string | null | undefined) => ["run-trace", runId] as const,
+
+  // ---- conventions ----
+  conventions: (repoId: string | null | undefined) => ["conventions", repoId] as const,
 };

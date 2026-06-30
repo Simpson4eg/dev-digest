@@ -10,6 +10,7 @@ export interface CreateSkillInput {
   source?: SkillSource;
   body: string;
   enabled?: boolean;
+  evidenceFiles?: string[] | null;
 }
 
 export type UpdateSkillInput = Partial<Omit<CreateSkillInput, 'source'>>;
@@ -40,6 +41,7 @@ export class SkillsService {
         source: input.source ?? 'manual',
         body: input.body,
         enabled: input.enabled,
+        evidenceFiles: input.evidenceFiles ?? null,
       }),
     );
   }

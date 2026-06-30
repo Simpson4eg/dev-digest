@@ -183,15 +183,39 @@ export const CommunitySkill = z.object({
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
 // ---- Conventions ----
+export const ConventionStatus = z.enum(['candidate', 'accepted', 'rejected']);
+export type ConventionStatus = z.infer<typeof ConventionStatus>;
+
 export const ConventionCandidate = z.object({
   id: z.string(),
   rule: z.string(),
-  evidence_path: z.string(),
-  evidence_snippet: z.string(),
-  confidence: z.number().min(0).max(1),
-  accepted: z.boolean(),
+  category: z.string().nullable(),
+  evidence_path: z.string().nullable(),
+  evidence_line: z.number().int().nullable(),
+  evidence_snippet: z.string().nullable(),
+  confidence: z.number().min(0).max(1).nullable(),
+  status: ConventionStatus,
+  created_at: z.string(),
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
+
+export const UpdateConventionBody = z.object({
+  status: ConventionStatus.optional(),
+  rule: z.string().trim().min(1).max(2000).optional(),
+  category: z.string().trim().max(100).optional(),
+});
+export type UpdateConventionBody = z.infer<typeof UpdateConventionBody>;
+
+export const CreateConventionSkillBody = z.object({
+  repo_id: z.string().uuid(),
+  convention_ids: z.array(z.string().uuid()).min(1),
+  name: z.string().trim().min(1).max(100),
+  description: z.string().trim().min(1).max(500),
+  body: z.string().trim().min(1).max(262_144),
+  type: z.enum(['rubric', 'convention', 'security', 'custom']).default('convention'),
+  enabled: z.boolean().default(true),
+});
+export type CreateConventionSkillBody = z.infer<typeof CreateConventionSkillBody>;
 
 // ---- Agents ----
 // 'openrouter' routes through the OpenAI-compatible API (OpenAIProvider with a

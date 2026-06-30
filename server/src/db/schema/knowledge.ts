@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, vector, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, vector, index, integer } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { repos } from './repos';
@@ -35,8 +35,13 @@ export const conventions = pgTable('conventions', {
     .references(() => workspaces.id, { onDelete: 'cascade' }),
   repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
   rule: text('rule').notNull(),
+  category: text('category'),
   evidencePath: text('evidence_path'),
+  evidenceLine: integer('evidence_line'),
   evidenceSnippet: text('evidence_snippet'),
   confidence: doublePrecision('confidence'),
+  /** Authoritative status. `accepted` is kept for backwards compat. */
+  status: text('status', { enum: ['candidate', 'accepted', 'rejected'] }).notNull().default('candidate'),
   accepted: boolean('accepted').notNull().default(false),
+  createdAt: now(),
 });
