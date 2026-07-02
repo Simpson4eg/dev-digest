@@ -4,8 +4,8 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Chip, Button, TextInput, SelectInput } from "@devdigest/ui";
-import { STATUS_FILTERS } from "../../constants";
-import { s } from "../../styles";
+import { STATUS_FILTERS } from "@/app/repos/[repoId]/pulls/constants";
+import { s } from "@/app/repos/[repoId]/pulls/styles";
 
 export function FilterBar({
   active,
@@ -34,7 +34,7 @@ export function FilterBar({
   return (
     <div style={s.filterBar}>
       <div style={s.filterChips}>
-        <div style={{ width: 240 }}>
+        <div style={s.filterInput}>
           <TextInput value={query} onChange={onQuery} placeholder={t("list.filterPlaceholder")} />
         </div>
         {STATUS_FILTERS.map(({ key, labelKey }) => (

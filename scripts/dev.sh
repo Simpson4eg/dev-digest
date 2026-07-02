@@ -66,15 +66,16 @@ done
 [ "${status:-}" = "healthy" ] || { echo "Postgres did not become healthy in time"; exit 1; }
 log "Postgres healthy"
 
-# --- install deps (only if missing) ------------------------------------------
-install_if_needed() {
-  if [ ! -d "$1/node_modules" ]; then
-    log "installing deps in $1"
-    (cd "$1" && pnpm install)
-  fi
+# --- install/sync deps -------------------------------------------------------
+# Always reconcile node_modules with the lockfile. pnpm is effectively a no-op
+# when already current, and this keeps an existing checkout working after a
+# dependency is added (checking only for node_modules would leave it stale).
+install_deps() {
+  log "syncing deps in $1"
+  (cd "$1" && pnpm install --frozen-lockfile)
 }
-install_if_needed server
-[ "$DB_ONLY" -eq 0 ] && [ "$RUN_CLIENT" -eq 1 ] && install_if_needed client
+install_deps server
+[ "$DB_ONLY" -eq 0 ] && [ "$RUN_CLIENT" -eq 1 ] && install_deps client
 # reviewer-core's RAW source is imported by the API at runtime (tsconfig alias);
 # without its deps the API crashes at boot with ERR_MODULE_NOT_FOUND. It uses npm.
 [ -d reviewer-core/node_modules ] || { log "installing deps in reviewer-core"; (cd reviewer-core && npm ci); }

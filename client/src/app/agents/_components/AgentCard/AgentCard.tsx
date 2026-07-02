@@ -6,7 +6,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon, Badge, Toggle } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
-import { useDeleteAgent } from "../../../../lib/hooks/agents";
+import { useDeleteAgent } from "@/lib/hooks/agents";
 import { modelColor } from "./helpers";
 import { s } from "./styles";
 
@@ -46,14 +46,7 @@ export function AgentCard({
           disabled={del.isPending}
           title="Delete agent"
           aria-label="Delete agent"
-          style={{
-            background: "none",
-            border: "none",
-            cursor: del.isPending ? "not-allowed" : "pointer",
-            color: "var(--text-muted)",
-            display: "inline-flex",
-            padding: 4,
-          }}
+          style={s.deleteBtn(del.isPending)}
         >
           <Icon.Trash size={14} style={del.isPending ? { animation: "ddspin 1s linear infinite" } : undefined} />
         </button>

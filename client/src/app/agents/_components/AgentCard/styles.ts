@@ -48,4 +48,12 @@ export const s = {
     padding: "1px 8px",
     borderRadius: 4,
   }),
+  deleteBtn: (isPending: boolean): CSSProperties => ({
+    background: "none",
+    border: "none",
+    cursor: isPending ? "not-allowed" : "pointer",
+    color: "var(--text-muted)",
+    display: "inline-flex",
+    padding: 4,
+  }),
 } as const;

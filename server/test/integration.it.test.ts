@@ -66,11 +66,28 @@ d('Testcontainers: pg + pgvector', () => {
     expect(rows[0]!.dist).toBeLessThan(0.0001);
   });
 
-  it('seed is idempotent (re-run does not duplicate workspace)', async () => {
+  it('seed is idempotent and provisions the test-quality preset once', async () => {
     await seed(pg.handle.db);
     await seed(pg.handle.db);
     const ws = await pg.handle.db.select().from(t.workspaces);
     expect(ws.filter((w) => w.name === 'default')).toHaveLength(1);
+
+    const testQualityAgents = await pg.handle.db
+      .select({ id: t.agents.id })
+      .from(t.agents)
+      .where(eq(t.agents.name, 'Test Quality Reviewer'));
+    expect(testQualityAgents).toHaveLength(1);
+
+    const linkedSkills = await pg.handle.db
+      .select({ name: t.skills.name })
+      .from(t.agentSkills)
+      .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
+      .where(eq(t.agentSkills.agentId, testQualityAgents[0]!.id));
+    expect(linkedSkills.map(({ name }) => name).sort()).toEqual([
+      'edge-case-coverage',
+      'mock-overuse-gate',
+      'uncovered-branches',
+    ]);
   });
 });
 

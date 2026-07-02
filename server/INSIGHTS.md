@@ -19,6 +19,12 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 
 ## Codebase Patterns
 
+- 2026-06-29 · `agent_skills` has no `workspace_id`; tenant safety must be enforced before writes and through joined reads · evidence: `server/src/modules/agents/service.ts:162`
+  Validate every requested skill id against the agent's workspace before replacing links, and filter linked-skill reads by `skills.workspace_id`. A valid foreign UUID otherwise satisfies both FKs and creates a cross-workspace prompt-instruction leak.
+
+- 2026-06-29 · Skill Stats uses multi-touch attribution and excludes legacy traces from its frequency denominator · evidence: `server/src/modules/skills/repository.ts:119`
+  A completed run is credited to every skill recorded in `trace.config.skills`; traces without that field predate skill observability and are not counted. Select only the JSONB `config.skills` subpath in SQL—full trace documents include prompts/raw output and are too large to hydrate for aggregation.
+
 - 2026-06-20 · `multi_agent_runs` exists but has NO FK from `agent_runs` — group party runs by `ran_at` time window (60s), not by id.
   evidence: `server/src/db/schema/runs.ts:8-50`
   The `agent_runs` table has no `multi_agent_run_id` column; the relationship is implicit (created within ~seconds of each other under the same `pr_id`). Code that needs to roll up "the latest party" (e.g. PR-detail cost+tokens) sorts completed runs by `ran_at DESC`, takes the newest timestamp, then includes everything within ±60s of it. See `lastPartyStats` in `server/src/modules/pulls/routes.ts`. Do NOT assume a FK exists.
@@ -37,6 +43,12 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
   There is no `pnpm sync-shared` or similar. After editing a Zod schema on the server, `cp server/src/vendor/shared/contracts/<file>.ts client/src/vendor/shared/contracts/<file>.ts`. Otherwise client compiles against a stale shape and runtime parse silently strips your new field (per `fastify-type-provider-zod` serializer behavior). Same applies for any new file added to the contracts folder.
 
 ## Recurring Errors & Fixes
+
+- 2026-06-29 · RESOLVED: DB CLI entrypoints must normalize `process.argv[1]` with `pathToFileURL(resolve(...))` on Windows · evidence: `server/src/db/{migrate,seed}.ts`
+  Comparing `import.meta.url` to ``file://${process.argv[1]}`` silently skipped both commands on Windows while returning exit code 0. As a result, `dev.sh` appeared healthy but neither migrations nor seed ran; keep CLI-main detection URL-normalized.
+
+- 2026-06-29 · RESOLVED: `writeFileAt` now uses `path.dirname`, so indexer pipeline tests create nested files on Windows · evidence: `server/test/indexer-pipeline.test.ts:140`
+  The six Windows-only ENOENT failures described below now pass; keep path construction separator-agnostic in test helpers.
 
 - 2026-06-19 · `writeFileAt` test helper uses `lastIndexOf('/')` and silently
   skips `mkdir` on Windows, causing 6 ENOENT failures in

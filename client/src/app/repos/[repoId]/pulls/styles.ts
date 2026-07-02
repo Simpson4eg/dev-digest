@@ -52,6 +52,12 @@ export const s = {
     color: "var(--text-secondary)",
   } satisfies CSSProperties,
   muted: { color: "var(--text-muted)" } satisfies CSSProperties,
+
+  findingsChips: { display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" } satisfies CSSProperties,
+  findingChipSep: { color: "var(--text-muted)", fontSize: 10 } satisfies CSSProperties,
+  findingChipLabel: (color: string): CSSProperties => ({ color, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }),
+
+  filterInput: { width: 240 } satisfies CSSProperties,
   filterBar: {
     display: "flex",
     alignItems: "center",
