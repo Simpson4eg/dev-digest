@@ -4,7 +4,6 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Button, EmptyState, Skeleton } from "@devdigest/ui";
 
-import type { ConventionCandidate } from "@devdigest/shared";
 import { useActiveRepo } from "@/lib/providers/repo-context";
 import { AppShell } from "@/components/app-shell";
 import {
@@ -121,6 +120,7 @@ export function ConventionsPageView() {
                 onReject={() =>
                   handleAction(c.id, c.status === "rejected" ? "candidate" : "rejected")
                 }
+                onEdit={(patch) => update.mutate({ id: c.id, patch })}
               />
             ))}
           </div>
