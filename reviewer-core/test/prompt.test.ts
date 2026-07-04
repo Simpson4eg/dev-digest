@@ -108,3 +108,21 @@ describe('assemblePrompt — ## Derived intent (Intent Layer)', () => {
     expect(idxDiff).toBeGreaterThan(idxIntent);
   });
 });
+
+describe('assemblePrompt — scope rule (T3 / Intent Layer)', () => {
+  it('appends the scope rule to the system message when intent is present', () => {
+    const sys = systemOf({ system: 'sys', diff: 'DIFF', intent: 'Intent: add rate limiting.' });
+    // Scope rule must be present (noise control for out-of-scope nits).
+    expect(sys).toMatch(/OUTSIDE the PR.*intent/i);
+    expect(sys).toMatch(/ONE consolidated signal finding/i);
+    // Must NOT contradict the injection guard: real defects still reported.
+    expect(sys).toMatch(/Real defects are always reported/i);
+  });
+
+  it('leaves the system message byte-identical when intent is absent or blank', () => {
+    const base = systemOf({ system: 'sys', diff: 'DIFF' });
+    expect(base).not.toMatch(/OUTSIDE the PR.*intent/i);
+    expect(systemOf({ system: 'sys', diff: 'DIFF', intent: undefined })).toBe(base);
+    expect(systemOf({ system: 'sys', diff: 'DIFF', intent: '   ' })).toBe(base);
+  });
+});

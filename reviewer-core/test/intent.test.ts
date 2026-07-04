@@ -1,13 +1,14 @@
 /**
  * extractIntent — the Intent Layer's cheap pre-review pass. Pins that the diff
- * and PR description reach the model UNTRUSTED-fenced (with the shared injection
- * guard on the system message), that the linked issue is fenced too, and that
- * the parsed Intent + usage are returned.
+ * skeleton and PR description reach the model UNTRUSTED-fenced (with the shared
+ * injection guard on the system message), that the linked issue is fenced too,
+ * that no changed-line bodies reach the diff slot, and that the parsed Intent +
+ * usage are returned.
  */
 import { describe, it, expect } from 'vitest';
 import type { LLMProvider, StructuredResult, ChatMessage } from '@devdigest/shared';
 import { MockGitClient } from '../../server/src/adapters/mocks.js';
-import { extractIntent } from '../src/index.js';
+import { extractIntent, diffSkeleton } from '../src/index.js';
 
 const INTENT_FIXTURE = {
   intent: 'Add rate limiting to public API endpoints to prevent abuse.',
@@ -88,7 +89,26 @@ describe('extractIntent', () => {
     expect(events.some((m) => /intent/i.test(m))).toBe(true);
   });
 
-  it('folds a linked issue into the (fenced) description block', async () => {
+  it('sends diff skeleton (file/hunk headers only) -- no changed-line bodies', async () => {
+    const { llm, calls } = recordingProvider();
+    const diff = await new MockGitClient().diff();
+
+    await extractIntent({ llm, model: 'm', diff });
+
+    const user = calls[0]![1]!.content;
+    const diffBlock = user.slice(
+      user.indexOf('<untrusted source="diff">'),
+      user.indexOf('</untrusted>', user.indexOf('<untrusted source="diff">')),
+    );
+    // File path and hunk header are present in the skeleton.
+    expect(diffBlock).toContain('src/config.ts');
+    expect(diffBlock).toContain('@@ -10,3 +10,4 @@');
+    // Changed-line body content is NOT present in the diff slot.
+    expect(diffBlock).not.toContain('stripeKey');
+    expect(diffBlock).not.toContain('+  stripeKey');
+  });
+
+  it('includes PR title in the pr-description block when provided', async () => {
     const { llm, calls } = recordingProvider();
     const diff = await new MockGitClient().diff();
 
@@ -96,12 +116,41 @@ describe('extractIntent', () => {
       llm,
       model: 'm',
       diff,
-      linkedIssue: 'ACME-482: public endpoints get hammered by anonymous clients',
+      title: 'Add rate limiting to public API',
+      prDescription: 'Implements middleware.',
     });
 
     const user = calls[0]![1]!.content;
     expect(user).toContain('<untrusted source="pr-description">');
-    expect(user).toContain('Linked ticket / issue:');
+    expect(user).toContain('PR title: Add rate limiting to public API');
+    expect(user).toContain('Implements middleware.');
+  });
+
+  it('omits the description section when neither title nor body is provided', async () => {
+    const { llm, calls } = recordingProvider();
+    const diff = await new MockGitClient().diff();
+
+    await extractIntent({ llm, model: 'm', diff });
+
+    const user = calls[0]![1]!.content;
+    expect(user).not.toContain('## PR description');
+    expect(user).not.toContain('<untrusted source="pr-description">');
+  });
+
+  it('routes plan entries into the Project context block (spec-i fencing)', async () => {
+    const { llm, calls } = recordingProvider();
+    const diff = await new MockGitClient().diff();
+
+    await extractIntent({
+      llm,
+      model: 'm',
+      diff,
+      plan: ['ACME-482: public endpoints get hammered by anonymous clients'],
+    });
+
+    const user = calls[0]![1]!.content;
+    expect(user).toContain('<untrusted source="spec-0">');
+    expect(user).toContain('## Project context');
     expect(user).toContain('ACME-482');
   });
 

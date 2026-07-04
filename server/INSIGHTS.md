@@ -67,6 +67,9 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
   `path.dirname(full)` for the mkdir target instead of slicing on a hardcoded
   separator. Do NOT block doc-only commits on these failures.
 
+- 2026-07-05 · `path.isAbsolute('/etc/passwd')` returns `false` on Windows — root-relative paths bypass the POSIX-only guard · evidence: `server/src/modules/reviews/run-executor.ts` candidate-path filter + `server/src/adapters/git/simple-git.ts:129-137`
+  On Windows, Node's `path.isAbsolute` treats leading-`/` paths as root-relative (relative to the current drive), not absolute — so `isAbsolute('/etc/passwd.md')` is `false`. For security filters on author-controlled paths, always add `/^[/\\]/` (rooted path) and `/^[a-zA-Z]:/` (Windows drive-letter) checks alongside `isAbsolute`. The PRIMARY defence is the adapter-level containment check in `SimpleGitClient.readFile` (resolve + startsWith base+sep), which catches everything regardless of platform. The secondary filter in `deriveIntent` is defence-in-depth but cannot be the only line of defence on Windows.
+
 ## Session Notes
 
 ## Open Questions

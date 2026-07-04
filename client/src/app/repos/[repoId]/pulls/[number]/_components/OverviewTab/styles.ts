@@ -13,6 +13,22 @@ export const s = {
   } satisfies CSSProperties,
 
   // ---- Intent Layer panel ----
+  intentHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  } satisfies CSSProperties,
+  recomputeBtn: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    background: "none",
+    border: "1px solid var(--border)",
+    borderRadius: 5,
+    padding: "2px 10px",
+    cursor: "pointer",
+    lineHeight: 1.6,
+  } satisfies CSSProperties,
   intentBox: {
     border: "1px solid var(--border)",
     borderRadius: 8,

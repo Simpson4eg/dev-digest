@@ -69,6 +69,19 @@ export function useIntent(prId: string | null | undefined) {
   });
 }
 
+/** Explicitly recompute the PR's intent (the "Recompute" button on IntentPanel).
+   Optimistically updates the cached intent on success; surfaces an error toast on failure. */
+export function useRegenerateIntent(prId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<PrIntentRecord>(`/pulls/${prId}/intent/regenerate`),
+    onSuccess: (data) => {
+      qc.setQueryData(qk.prIntent(prId), data);
+    },
+    onError: () => notify.error('Failed to recompute intent'),
+  });
+}
+
 /** Delete one run from the PR's run history (+ its trace). */
 export function useDeleteRun(prId: string | null | undefined) {
   const qc = useQueryClient();

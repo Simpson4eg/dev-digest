@@ -1,12 +1,11 @@
 /* IntentPanel — the Intent Layer surface on the PR Overview tab. Renders the
-   PR's derived motivation and its IN SCOPE / OUT OF SCOPE lists. Empty state
-   ("run a review") until the first review run derives it. Layout-only: all data
-   comes from the useIntent hook. */
+   PR's derived motivation and its IN SCOPE / OUT OF SCOPE lists. A "Recompute"
+   button lets the user re-derive intent without running a full review. */
 "use client";
 
 import React from "react";
 import { Icon, SectionLabel } from "@devdigest/ui";
-import { useIntent } from "@/lib/hooks/reviews";
+import { useIntent, useRegenerateIntent } from "@/lib/hooks/reviews";
 import { s } from "./styles";
 
 /** One labelled scope column (IN SCOPE / OUT OF SCOPE) with iconed bullets. */
@@ -42,14 +41,23 @@ function ScopeList({
 
 export function IntentPanel({ prId }: { prId: string | null | undefined }) {
   const { data: intent, isLoading } = useIntent(prId);
+  const regenerate = useRegenerateIntent(prId);
 
-  // Nothing to show while the first load is in flight — avoids a flash of the
-  // empty state before the (usually present) intent arrives.
   if (isLoading) return null;
 
   return (
     <section>
-      <SectionLabel icon="Target">Intent</SectionLabel>
+      <div style={s.intentHeader}>
+        <SectionLabel icon="Target">Intent</SectionLabel>
+        <button
+          style={s.recomputeBtn}
+          onClick={() => regenerate.mutate()}
+          disabled={regenerate.isPending || !prId}
+          title="Re-derive intent from the current PR description and diff"
+        >
+          {regenerate.isPending ? "Computing…" : "Recompute"}
+        </button>
+      </div>
       {!intent ? (
         <div style={s.intentEmpty}>
           No intent derived yet — run a review to reconstruct this PR&apos;s

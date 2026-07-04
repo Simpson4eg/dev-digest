@@ -49,6 +49,7 @@ export {
 // Intent Layer: cheap pre-review pass that reconstructs a PR's motivation + scope.
 export {
   extractIntent,
+  diffSkeleton,
   INTENT_SYSTEM,
   type ExtractIntentInput,
   type ExtractIntentResult,

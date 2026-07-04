@@ -1,6 +1,7 @@
+import { isAbsolute } from 'node:path';
 import type { Container } from '../../platform/container.js';
 import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, extractIntent, countBlockers } from '@devdigest/reviewer-core';
+import { reviewPullRequest, extractIntent, diffSkeleton, countBlockers, type ReviewEvent } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -364,15 +365,137 @@ export class ReviewRunExecutor {
   }
 
   /**
+   * Core intent computation — shared by the best-effort pre-work path
+   * (`deriveIntent`) and the explicit regenerate endpoint (`recomputeIntent`).
+   * Callers own error handling. Persists the result via `upsertIntent`.
+   */
+  private async computeIntent(
+    workspaceId: string,
+    pull: PullRow,
+    repo: typeof schema.repos.$inferSelect,
+    diff: UnifiedDiff,
+    logInfo: (msg: string) => void,
+    onEvent: (e: ReviewEvent) => void,
+  ): Promise<Intent> {
+    const im = await resolveFeatureModel(this.container, workspaceId, 'review_intent');
+    const llm = await this.container.llm(im.provider as Provider);
+
+    // ---- Gather plan[] best-effort from three sources -------------------------
+    const plan: string[] = [];
+
+    // Source 1: Linked ticket/issue — via the GitHubClient port (T7: de-duplicated
+    // from the private resolveLinkedIssue in octokit.ts).
+    if (pull.body) {
+      try {
+        const gh = await this.container.github();
+        const issue = await gh.resolveLinkedIssue({ owner: repo.owner, name: repo.name }, pull.body);
+        if (issue) {
+          const block = `Linked ticket #${issue.number} -- ${issue.title}\n${issue.body ?? ''}`;
+          if (block.trim().length > 0) plan.push(block);
+        }
+      } catch (err) {
+        logInfo(`intent: linked issue skipped -- ${(err as Error).message}`);
+      }
+    }
+
+    // Source 2: Linked repo spec/plan file -- scan PR body for repo-relative
+    // markdown/text paths. Cap each file at 8000 chars. Up to 2 distinct paths.
+    if (pull.body) {
+      try {
+        const rawPaths: string[] = [];
+        const mdLinkRe = /\[[^\]]*\]\(([^)]+)\)/g;
+        let mdMatch: RegExpExecArray | null;
+        while ((mdMatch = mdLinkRe.exec(pull.body)) !== null) {
+          rawPaths.push(mdMatch[1]!);
+        }
+        const bareRe = /\b([\w./-]+\.(?:md|mdx|txt|rst))\b/g;
+        let bareMatch: RegExpExecArray | null;
+        while ((bareMatch = bareRe.exec(pull.body)) !== null) {
+          rawPaths.push(bareMatch[1]!);
+        }
+
+        // Filter: keep only repo-relative paths (no http(s)://, no .., no absolute/rooted).
+        const seen = new Set<string>();
+        const candidatePaths = rawPaths
+          .map((p) => p.trim())
+          .filter((p) => {
+            if (!p) return false;
+            if (/^https?:\/\//i.test(p)) return false;
+            if (p.includes('..')) return false;
+            if (isAbsolute(p)) return false;
+            if (/^[/\\]/.test(p)) return false;
+            if (/^[a-zA-Z]:/.test(p)) return false;
+            if (!/\.(?:md|mdx|txt|rst)$/i.test(p)) return false;
+            const normalized = p.replace(/^\.\//, '');
+            if (seen.has(normalized)) return false;
+            seen.add(normalized);
+            return true;
+          })
+          .slice(0, 2);
+
+        for (const filePath of candidatePaths) {
+          try {
+            const text = await this.container.git.readFile(
+              { owner: repo.owner, name: repo.name },
+              filePath,
+            );
+            const capped = text.slice(0, 8000);
+            if (capped.trim().length > 0) {
+              plan.push(`Spec file ${filePath}:\n${capped}`);
+            }
+          } catch (err) {
+            logInfo(`intent: spec file ${filePath} skipped -- ${(err as Error).message}`);
+          }
+        }
+      } catch (err) {
+        logInfo(`intent: spec file scan skipped -- ${(err as Error).message}`);
+      }
+    }
+
+    // Source 3: Embedded long plan
+    if (pull.body && pull.body.length > 4000) {
+      const block = `Full PR description:\n${pull.body}`;
+      if (block.trim().length > 0) plan.push(block);
+    }
+
+    const cleanPlan = plan.filter((b) => b.trim().length > 0);
+    if (cleanPlan.length > 0) {
+      logInfo(`intent: attached ${cleanPlan.length} plan/spec source(s)`);
+    }
+    // ---- end gather ----------------------------------------------------------
+
+    const res = await extractIntent({
+      llm,
+      model: im.model,
+      diff,
+      title: pull.title,
+      ...(pull.body ? { prDescription: pull.body } : {}),
+      ...(cleanPlan.length > 0 ? { plan: cleanPlan } : {}),
+      sessionId: `${repo.owner}/${repo.name}#${pull.number}:intent`,
+      onEvent,
+    });
+
+    // T2 — log how many tokens the skeleton saves vs the full diff body.
+    try {
+      const skeleton = diffSkeleton(diff);
+      const full = this.container.tokenizer.count(diff.raw);
+      const skeletonTokens = this.container.tokenizer.count(skeleton);
+      logInfo(`intent: diff skeleton saved ~${full - skeletonTokens} tokens (${full}->${skeletonTokens})`);
+    } catch {
+      // tokenizer failure is non-fatal
+    }
+
+    await this.repo.upsertIntent(pull.id, res.intent);
+    return res.intent;
+  }
+
+  /**
    * Intent Layer pre-work: derive the PR's motivation + scope ONCE (shared by
    * every queued run), persist it (`pr_intent`), and return a compact rendering
    * to feed into each agent's prompt.
    *
-   * Best-effort — any failure (missing provider key, LLM error) is surfaced as a
-   * Live Log info and returns `undefined`, so the review proceeds exactly as it
-   * did before the Intent Layer (same pattern as `buildCallersDigest`). Uses the
-   * workspace's `review_intent` model choice (Settings), falling back to the
-   * registry's cheap default.
+   * Best-effort — any failure returns `undefined` so the review proceeds as
+   * before. Uses the workspace's `review_intent` model choice (Settings).
    */
   private async deriveIntent(
     workspaceId: string,
@@ -382,22 +505,31 @@ export class ReviewRunExecutor {
     runLog: RunLogger,
   ): Promise<string | undefined> {
     try {
-      const im = await resolveFeatureModel(this.container, workspaceId, 'review_intent');
-      const llm = await this.container.llm(im.provider as Provider);
-      const res = await extractIntent({
-        llm,
-        model: im.model,
-        diff,
-        ...(pull.body ? { prDescription: pull.body } : {}),
-        sessionId: `${repo.owner}/${repo.name}#${pull.number}:intent`,
-        onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
-      });
-      await this.repo.upsertIntent(pull.id, res.intent);
-      return renderIntent(res.intent);
+      const intent = await this.computeIntent(
+        workspaceId, pull, repo, diff,
+        (msg) => runLog.info(msg),
+        (e) => runLog.event(e.kind, e.msg, e.data),
+      );
+      return renderIntent(intent);
     } catch (err) {
-      runLog.info(`intent: skipped — ${(err as Error).message}`);
+      runLog.info(`intent: skipped -- ${(err as Error).message}`);
       return undefined;
     }
+  }
+
+  /**
+   * Explicit intent recompute (for the `POST /pulls/:id/intent/regenerate`
+   * endpoint). Unlike `deriveIntent`, errors propagate to the caller so the
+   * HTTP handler can surface them as a 4xx/5xx. No SSE bus — the result is
+   * returned synchronously in the HTTP response.
+   */
+  async recomputeIntent(
+    workspaceId: string,
+    pull: PullRow,
+    repo: typeof schema.repos.$inferSelect,
+    diff: UnifiedDiff,
+  ): Promise<Intent> {
+    return this.computeIntent(workspaceId, pull, repo, diff, () => undefined, () => undefined);
   }
 
   /**
