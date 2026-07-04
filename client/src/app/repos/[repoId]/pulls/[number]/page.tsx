@@ -70,7 +70,7 @@ export default function PRDetailPage() {
       />
 
       <div style={s.tabContent}>
-        {tab === "overview" && <OverviewTab prBody={pr.body} />}
+        {tab === "overview" && <OverviewTab prBody={pr.body} prId={prId} />}
 
         {tab === "findings" && (
           <FindingsTab

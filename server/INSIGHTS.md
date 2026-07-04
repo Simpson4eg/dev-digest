@@ -17,7 +17,13 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 
 ## What Doesn't Work
 
+- 2026-07-04 · In `reviews.it.test.ts` the intent pre-work is silently skipped unless you point `review_intent` at a MOCKED provider — its registry default is `openrouter`, which the tests don't override · evidence: `server/test/reviews.it.test.ts` (Intent Layer test) + `server/src/modules/reviews/run-executor.ts` `deriveIntent`
+  `deriveIntent` is best-effort: `container.llm('openrouter')` throws (no key in test) → intent is caught + skipped → `pr_intent` stays empty. To actually exercise it, `PUT /settings` with `feature_models.review_intent = { provider: 'openai', model: 'gpt-4.1' }` AND feed the mock a `structuredBySchema: { Intent: <fixture>, Review: <fixture> }` (MockLLMProvider validates the fixture against the passed schema, so the Intent fixture must match the `Intent` shape, not `Review`). Otherwise you'll wrongly conclude the wiring is broken.
+
 ## Codebase Patterns
+
+- 2026-07-04 · The Intent Layer was fully scaffolded but DEAD until wired in run-executor — `pr_intent` table, `upsertIntent`/`getIntent`, the `review_intent` registry entry, and the `Intent`/`PrIntentRecord` contracts all pre-existed with NO code path generating or serving intent · evidence: `server/src/modules/reviews/run-executor.ts:62-70` (comment said "Loads the diff + intent once" but only the diff was loaded)
+  Pattern for such "half-built feature" registry entries (e.g. `risk_brief`, `conformance` in `FEATURE_MODELS`): the contract + table + repo methods may already exist — grep for them before adding new ones. Wiring point is `executeRuns` shared pre-work: `resolveFeatureModel(container, workspaceId, <feature>)` → `container.llm(provider)` → the pure pass → persist. Keep it best-effort (try/catch → `runLog.info('… skipped')`), OUTSIDE `failAll`, so enrichment never fails the review.
 
 - 2026-06-29 · `agent_skills` has no `workspace_id`; tenant safety must be enforced before writes and through joined reads · evidence: `server/src/modules/agents/service.ts:162`
   Validate every requested skill id against the agent's workspace before replacing links, and filter linked-skill reads by `skills.workspace_id`. A valid foreign UUID otherwise satisfies both FKs and creates a cross-workspace prompt-instruction leak.

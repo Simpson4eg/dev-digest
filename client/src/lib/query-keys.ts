@@ -47,6 +47,8 @@ export const qk = {
   prRuns: (prId: string | null | undefined) => ["pr-runs", prId] as const,
   reviews: (prId: string | null | undefined) => ["reviews", prId] as const,
   prComments: (prId: string | null | undefined) => ["pr-comments", prId] as const,
+  /** Intent Layer: derived motivation + scope for a PR (null until derived). */
+  prIntent: (prId: string | null | undefined) => ["pr-intent", prId] as const,
 
   // ---- run trace ----
   runTrace: (runId: string | null | undefined) => ["run-trace", runId] as const,

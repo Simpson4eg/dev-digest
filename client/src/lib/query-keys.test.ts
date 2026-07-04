@@ -13,6 +13,7 @@ describe("qk — query-key factory", () => {
     expect(qk.pulls("r1")).toEqual(["pulls", "r1"]);
     expect(qk.pull("p1")).toEqual(["pull", "p1"]);
     expect(qk.reviews("p1")).toEqual(["reviews", "p1"]);
+    expect(qk.prIntent("p1")).toEqual(["pr-intent", "p1"]);
     expect(qk.prActiveRuns("p1")).toEqual(["pr-active-runs", "p1"]);
     expect(qk.prRuns("p1")).toEqual(["pr-runs", "p1"]);
     expect(qk.runTrace("run1")).toEqual(["run-trace", "run1"]);

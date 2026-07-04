@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, PrIntentRecord, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
@@ -180,6 +180,18 @@ export class ReviewService {
     return rows.map(({ review, findings }) =>
       reviewToDto(review, findings, review.agentId ? names.get(review.agentId) : null),
     );
+  }
+
+  /**
+   * The persisted Intent Layer result for a PR, or `null` when none has been
+   * derived yet (the client renders an empty state). Throws 404 only for an
+   * unknown/foreign PR (workspace-scoped via `getPull`).
+   */
+  async intentForPull(workspaceId: string, prId: string): Promise<PrIntentRecord | null> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const intent = await this.repo.getIntent(prId);
+    return intent ? { ...intent, pr_id: prId } : null;
   }
 
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {

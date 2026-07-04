@@ -61,6 +61,11 @@ export function usePrDetailPage() {
   const invalidateRunHistory = () => {
     if (prId) qc.invalidateQueries({ queryKey: qk.prRuns(prId) });
   };
+  // A completed run re-derives the PR's intent (run-executor pre-work) — refresh
+  // the Overview IntentPanel so it reflects the latest run without a reload.
+  const invalidateIntent = () => {
+    if (prId) qc.invalidateQueries({ queryKey: qk.prIntent(prId) });
+  };
 
   // ---- ?tab / ?trace query-param state ----
   const tab = search.get("tab") ?? DEFAULT_TAB;
@@ -135,6 +140,7 @@ export function usePrDetailPage() {
     onRunDone: () => {
       invalidateActiveRuns();
       invalidateRunHistory();
+      invalidateIntent();
       refetchReviews();
     },
   };

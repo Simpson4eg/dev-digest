@@ -1,6 +1,7 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import { reviewPullRequest, extractIntent, countBlockers } from '@devdigest/reviewer-core';
+import { resolveFeatureModel } from '../settings/feature-models.js';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -33,6 +34,18 @@ export type RunOutcome = {
   grounding: string;
   raw: Review;
 };
+
+/** Compact, prompt-ready rendering of a derived Intent (motivation + scope). */
+function renderIntent(intent: Intent): string {
+  const parts = [intent.intent.trim()];
+  if (intent.in_scope.length > 0) {
+    parts.push(`In scope:\n${intent.in_scope.map((s) => `- ${s}`).join('\n')}`);
+  }
+  if (intent.out_of_scope.length > 0) {
+    parts.push(`Out of scope:\n${intent.out_of_scope.map((s) => `- ${s}`).join('\n')}`);
+  }
+  return parts.join('\n\n');
+}
 
 /**
  * Owns the background execution of queued agent runs (extracted from
@@ -104,6 +117,13 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // Intent Layer — a cheap pre-review pass shared by every queued run: derive
+    // the PR's motivation + scope from its body + diff, persist it, and feed it
+    // (as untrusted context) into each agent's prompt. Best-effort: an intent
+    // failure NEVER fails the review (it is enrichment, like the callers digest),
+    // so it is intentionally OUTSIDE the failAll path.
+    const intentText = await this.deriveIntent(workspaceId, pull, repo, diff, runLog);
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -111,7 +131,7 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, intentText);
         logger?.info(
           {
             runId,
@@ -143,6 +163,7 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    intentText?: string,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -223,6 +244,9 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Intent Layer — derived motivation + scope (untrusted). Omitted when the
+        // pre-work intent pass produced nothing (missing key, LLM error, …).
+        ...(intentText ? { intent: intentText } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -336,6 +360,43 @@ export class ReviewRunExecutor {
         .catch(() => undefined);
       this.container.runBus.complete(runId);
       throw err;
+    }
+  }
+
+  /**
+   * Intent Layer pre-work: derive the PR's motivation + scope ONCE (shared by
+   * every queued run), persist it (`pr_intent`), and return a compact rendering
+   * to feed into each agent's prompt.
+   *
+   * Best-effort — any failure (missing provider key, LLM error) is surfaced as a
+   * Live Log info and returns `undefined`, so the review proceeds exactly as it
+   * did before the Intent Layer (same pattern as `buildCallersDigest`). Uses the
+   * workspace's `review_intent` model choice (Settings), falling back to the
+   * registry's cheap default.
+   */
+  private async deriveIntent(
+    workspaceId: string,
+    pull: PullRow,
+    repo: typeof schema.repos.$inferSelect,
+    diff: UnifiedDiff,
+    runLog: RunLogger,
+  ): Promise<string | undefined> {
+    try {
+      const im = await resolveFeatureModel(this.container, workspaceId, 'review_intent');
+      const llm = await this.container.llm(im.provider as Provider);
+      const res = await extractIntent({
+        llm,
+        model: im.model,
+        diff,
+        ...(pull.body ? { prDescription: pull.body } : {}),
+        sessionId: `${repo.owner}/${repo.name}#${pull.number}:intent`,
+        onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
+      });
+      await this.repo.upsertIntent(pull.id, res.intent);
+      return renderIntent(res.intent);
+    } catch (err) {
+      runLog.info(`intent: skipped — ${(err as Error).message}`);
+      return undefined;
     }
   }
 

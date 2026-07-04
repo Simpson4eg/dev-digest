@@ -66,6 +66,14 @@ export interface PromptParts {
    * undefined → section omitted.
    */
   prDescription?: string;
+  /**
+   * Derived PR intent/scope (Intent Layer). Untrusted — reconstructed by a cheap
+   * LLM pass from the (author-controlled) description + diff, so it is a prime
+   * injection vector too. Delimiter-wrapped; rendered right before the diff so
+   * the model judges the changes against the stated scope. Empty/undefined →
+   * section omitted (no behavior change).
+   */
+  intent?: string;
   /** The unified diff / user task (untrusted content). */
   diff: string;
   /** Optional task framing line, e.g. "Review PR #482 '…'". */
@@ -116,6 +124,9 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     userSections.push(
       `## Callers of changed symbols\n${wrapUntrusted('callers', parts.callers)}`,
     );
+  }
+  if (parts.intent && parts.intent.trim().length > 0) {
+    userSections.push(`## Derived intent\n${wrapUntrusted('intent', parts.intent)}`);
   }
   userSections.push(`## Diff to review\n${wrapUntrusted('diff', parts.diff)}`);
 

@@ -22,6 +22,9 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 
 ## Codebase Patterns
 
+- 2026-07-04 · Intent derivation is a SEPARATE exported pass, not part of `reviewPullRequest` — the engine doc explicitly excludes intent ("caller owns it") · evidence: `reviewer-core/src/review/run.ts:19-23` + `reviewer-core/src/review/intent.ts`
+  `extractIntent()` is its own `completeStructured<Intent>` call the consumer runs BEFORE the review; it reuses `assemblePrompt` so the untrusted PR body + diff get `wrapUntrusted` + `INJECTION_GUARD` (never build raw messages for a new LLM pass). Its result is fed back into the review via the new optional `intent` slot on `ReviewInput`/`PromptParts` (rendered `## Derived intent`, wrapped, right before the diff — omit-when-empty like `callers`/`repoMap`). When adding another cheap pass (risk brief, conformance), follow this shape: new pure fn in `src/review/`, export from `index.ts`, reuse `assemblePrompt`.
+
 ## Tool & Library Notes
 
 ## Recurring Errors & Fixes

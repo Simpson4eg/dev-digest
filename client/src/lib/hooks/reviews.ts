@@ -9,6 +9,7 @@ import { qk } from "../query-keys";
 import { notify } from "../providers/toast";
 import type {
   FindingActionKind,
+  PrIntentRecord,
   PrReviewComment,
   ReviewRecord,
   ReviewRunResponse,
@@ -53,6 +54,17 @@ export function usePrReviews(prId: string | null | undefined) {
   return useQuery({
     queryKey: qk.reviews(prId),
     queryFn: () => api.get<ReviewRecord[]>(`/pulls/${prId}/reviews`),
+    enabled: !!prId,
+  });
+}
+
+// ---- Intent Layer: derived motivation + scope for a PR (null until derived) --
+/** The PR's derived intent (motivation + in/out scope), or null before the
+   first review run has produced it. Rendered by the Overview tab's IntentPanel. */
+export function useIntent(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.prIntent(prId),
+    queryFn: () => api.get<PrIntentRecord | null>(`/pulls/${prId}/intent`),
     enabled: !!prId,
   });
 }
