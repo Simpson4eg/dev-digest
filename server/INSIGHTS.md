@@ -39,6 +39,12 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
   evidence: `server/src/vendor/shared/contracts/trace.ts:94-114` + `server/src/modules/reviews/repository/run.repo.ts:51`
   The repo returns `RunSummary[]` typed from the schema; if a field is required (even nullable), TS fails compilation because repo doesn't set it. Service `listRuns()` wraps the repo output and adds derived fields (cost_usd from PriceBook). Pattern: derived/enriched fields go `.nullable().optional()`; the service layer overwrites the optional.
 
+- 2026-07-05 · Read-time "brief" features (Smart Diff) are their own module that COMPOSES already-persisted data with zero LLM + zero persistence — split a pure `compose.ts` from a DB-reading `service.ts` so the core is hermetically testable · evidence: `server/src/modules/smart-diff/compose.ts` (pure `(files, findings) => SmartDiff`) + `server/src/modules/smart-diff/service.ts:34-45`
+  Unlike the Intent Layer (which ADDS a cheap LLM pass — see the 2026-07-04 note), Smart Diff must never touch `container.llm`: the service only reads `prFiles` + the LATEST review's findings (`reviewsForPull` is newest-first → `.find(r => r.review.kind === 'review')`) and delegates to the pure composer. Route `GET /pulls/:id/smart-diff` lives in a dedicated module registered in `modules/index.ts`. Reuse this shape for upcoming blast/brief read features: pure core + thin DB service, unit-test the core with plain arrays (no `Container`).
+
+- 2026-07-05 · The reviews domain persists NO per-file summary — only whole-PR `reviews.summary` + per-file `findings` (file/start_line/severity/title) · evidence: `server/src/db/schema/reviews.ts:22` (summary) + `:28-46` (findings)
+  So any per-file "what this does" line (e.g. Smart Diff's `pseudocode_summary`) can only be REUSED from findings (we take the highest-severity finding's title) or needs a new model call — no neutral per-file description is stored anywhere. Don't assume one exists because a design mock shows it.
+
 ## Tool & Library Notes
 
 - 2026-06-23 · OpenAI SDK 4.x requires `fetch: globalThis.fetch` in the constructor on Node 22+/24 — otherwise its bundled node-fetch v2 shim causes "Premature close" · evidence: `server/src/adapters/llm/openai.ts:52`

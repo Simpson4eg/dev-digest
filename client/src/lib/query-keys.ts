@@ -49,6 +49,8 @@ export const qk = {
   prComments: (prId: string | null | undefined) => ["pr-comments", prId] as const,
   /** Intent Layer: derived motivation + scope for a PR (null until derived). */
   prIntent: (prId: string | null | undefined) => ["pr-intent", prId] as const,
+  /** Smart Diff: risk-ordered file groups + finding overlay for a PR. */
+  smartDiff: (prId: string | null | undefined) => ["smart-diff", prId] as const,
 
   // ---- run trace ----
   runTrace: (runId: string | null | undefined) => ["run-trace", runId] as const,

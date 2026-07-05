@@ -14,11 +14,17 @@ export function CodeLine({
   path,
   threads,
   commenting,
+  anchorId,
+  highlight,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
+  /** DOM id for scroll-to-line (Smart Diff finding badges scroll here). */
+  anchorId?: string;
+  /** Tint + gutter marker when the reviewer flagged this line. */
+  highlight?: boolean;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
@@ -37,11 +43,18 @@ export function CodeLine({
 
   return (
     <div
+      {...(anchorId ? { id: anchorId } : {})}
       style={cs.rowWrap}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={lineRowFor(ln.kind)}>
+      <div
+        style={
+          highlight
+            ? { ...lineRowFor(ln.kind), boxShadow: "inset 3px 0 0 var(--warning-text, #d29922)" }
+            : lineRowFor(ln.kind)
+        }
+      >
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button

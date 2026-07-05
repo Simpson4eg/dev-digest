@@ -15,6 +15,7 @@ import type {
   ReviewRunResponse,
   RunEvent,
   RunSummary,
+  SmartDiff,
 } from "@devdigest/shared";
 
 // ---- Active (in-flight) runs — server-side source of truth ----
@@ -65,6 +66,18 @@ export function useIntent(prId: string | null | undefined) {
   return useQuery({
     queryKey: qk.prIntent(prId),
     queryFn: () => api.get<PrIntentRecord | null>(`/pulls/${prId}/intent`),
+    enabled: !!prId,
+  });
+}
+
+// ---- Smart Diff: risk-ordered diff layout (core → wiring → boilerplate) ----
+/** The PR's risk-ordered diff (file groups + per-file finding overlay). Composed
+   server-side from the PR files + the latest review's findings — no LLM call.
+   Works before any review (empty finding overlay); refetched when reviews change. */
+export function useSmartDiff(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.smartDiff(prId),
+    queryFn: () => api.get<SmartDiff>(`/pulls/${prId}/smart-diff`),
     enabled: !!prId,
   });
 }
@@ -157,6 +170,9 @@ export function useRunReview() {
       }),
     onSuccess: (_d, { prId }) => {
       qc.invalidateQueries({ queryKey: qk.reviews(prId) });
+      // The Smart Diff finding overlay is derived from the latest review — drop
+      // it so the "N findings" badges appear once the run's findings land.
+      qc.invalidateQueries({ queryKey: qk.smartDiff(prId) });
     },
   });
 }

@@ -30,12 +30,48 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+/** Stable DOM id for a given new-file line — the scroll target of a finding badge. */
+export function lineAnchorId(path: string, line: number): string {
+  return `sd-${path}-L${line}`;
+}
+
+export function FileCard({
+  file,
+  commenting,
+  findingLines,
+  summary,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  /** New-file line numbers the latest review flagged (Smart Diff overlay). */
+  findingLines?: number[];
+  /** One-line "what the reviewer flagged" summary (Smart Diff), reused from findings. */
+  summary?: string | null;
+}) {
   const t = useTranslations("shell");
+  const findingSet = React.useMemo(() => new Set(findingLines ?? []), [findingLines]);
+  const findingCount = findingLines?.length ?? 0;
   const [open, setOpen] = React.useState(
-    (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
+    // Flagged files auto-expand so the finding is visible without a click.
+    findingCount > 0 || (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
   );
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
+
+  // Jump to the first flagged line (expanding the file first if collapsed).
+  const scrollToFirstFinding = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setOpen(true);
+      if (findingCount === 0) return;
+      const first = Math.min(...(findingLines ?? []));
+      requestAnimationFrame(() => {
+        document
+          .getElementById(lineAnchorId(file.path, first))
+          ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      });
+    },
+    [findingCount, findingLines, file.path]
+  );
 
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
@@ -64,6 +100,29 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
           <span style={s.addText}>+{file.additions}</span>{" "}
           <span style={s.delText}>−{file.deletions}</span>
         </span>
+        {findingCount > 0 && (
+          <button
+            type="button"
+            onClick={scrollToFirstFinding}
+            title="Jump to the first flagged line"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--warning-text, #d29922)",
+              background: "transparent",
+              border: "1px solid var(--warning-text, #d29922)",
+              borderRadius: 999,
+              padding: "1px 8px",
+              cursor: "pointer",
+            }}
+          >
+            <Icon.AlertTriangle size={12} />
+            {findingCount} {findingCount === 1 ? "finding" : "findings"}
+          </button>
+        )}
         {commentCount > 0 && (
           <span
             style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}
@@ -73,20 +132,41 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
           </span>
         )}
       </div>
+      {summary && (
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            padding: "0 12px 10px 34px",
+            fontSize: 12,
+            color: "var(--text-muted)",
+          }}
+        >
+          <Icon.Sparkles size={12} style={{ marginTop: 2, flexShrink: 0 }} />
+          <span>
+            <strong style={{ color: "var(--text-secondary, var(--text-muted))" }}>What this does:</strong>{" "}
+            {summary}
+          </span>
+        </div>
+      )}
       {open && (
         <div style={s.fileBody}>
           {lines.length === 0 ? (
             <div style={s.noDiff}>{t("diffViewer.noDiffText")}</div>
           ) : (
-            lines.map((ln, i) => (
-              <CodeLine
-                key={i}
-                ln={ln}
-                path={file.path}
-                threads={threadsForLine(ln, matched)}
-                commenting={commenting}
-              />
-            ))
+            lines.map((ln, i) => {
+              const flagged = ln.newNo != null && findingSet.has(ln.newNo);
+              return (
+                <CodeLine
+                  key={i}
+                  ln={ln}
+                  path={file.path}
+                  threads={threadsForLine(ln, matched)}
+                  commenting={commenting}
+                  {...(flagged ? { anchorId: lineAnchorId(file.path, ln.newNo!), highlight: true } : {})}
+                />
+              );
+            })
           )}
           {commenting && commenting.showComments && <OutdatedComments threads={outdated} />}
         </div>
