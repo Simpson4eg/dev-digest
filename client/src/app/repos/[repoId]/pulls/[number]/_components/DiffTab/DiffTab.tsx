@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { SectionLabel, Button } from "@devdigest/ui";
 import {
   DiffViewer,
@@ -11,6 +12,7 @@ import {
   type DiffFinding,
 } from "@/components/diff-viewer";
 import { usePrComments, useCreatePrComment, useSmartDiff, usePrReviews } from "@/lib/hooks/reviews";
+import { qk } from "@/lib/query-keys";
 import { notify } from "@/lib/providers/toast";
 import type { PrFile } from "@devdigest/shared";
 import { SmartDiffViewer } from "./SmartDiffViewer";
@@ -37,6 +39,16 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
 
   const commentCount = comments?.length ?? 0;
   const smartActive = order === "smart" && !!smartDiff;
+
+  // Smart Diff reads `pr_files`, which the pull-detail endpoint refreshes as a
+  // side-effect; the two requests race, so a freshly re-imported file (e.g. a
+  // lock-file) can be missing from the first smart-diff read while Original
+  // order (fresh pull detail) shows it. Refetch smart-diff once the PR's file
+  // set is known/changes, so both orders stay consistent.
+  const qc = useQueryClient();
+  React.useEffect(() => {
+    if (prId) qc.invalidateQueries({ queryKey: qk.smartDiff(prId) });
+  }, [qc, prId, filesCount]);
 
   // ---- Finding overlay + navigator -----------------------------------------
   // Full findings of the LATEST review, keyed by file — drives the badge, range

@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PrFile, SmartDiff } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/shell.json";
 
@@ -45,10 +46,13 @@ const REVIEWS = [
 ];
 
 function renderTab() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <NextIntlClientProvider locale="en" messages={{ shell: messages }}>
-      <DiffTab prId="pr1" filesCount={1} files={FILES} />
-    </NextIntlClientProvider>,
+    <QueryClientProvider client={qc}>
+      <NextIntlClientProvider locale="en" messages={{ shell: messages }}>
+        <DiffTab prId="pr1" filesCount={1} files={FILES} />
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
   );
 }
 
