@@ -9,11 +9,13 @@ import { qk } from "../query-keys";
 import { notify } from "../providers/toast";
 import type {
   FindingActionKind,
+  PrIntentRecord,
   PrReviewComment,
   ReviewRecord,
   ReviewRunResponse,
   RunEvent,
   RunSummary,
+  SmartDiff,
 } from "@devdigest/shared";
 
 // ---- Active (in-flight) runs — server-side source of truth ----
@@ -54,6 +56,42 @@ export function usePrReviews(prId: string | null | undefined) {
     queryKey: qk.reviews(prId),
     queryFn: () => api.get<ReviewRecord[]>(`/pulls/${prId}/reviews`),
     enabled: !!prId,
+  });
+}
+
+// ---- Intent Layer: derived motivation + scope for a PR (null until derived) --
+/** The PR's derived intent (motivation + in/out scope), or null before the
+   first review run has produced it. Rendered by the Overview tab's IntentPanel. */
+export function useIntent(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.prIntent(prId),
+    queryFn: () => api.get<PrIntentRecord | null>(`/pulls/${prId}/intent`),
+    enabled: !!prId,
+  });
+}
+
+// ---- Smart Diff: risk-ordered diff layout (core → wiring → boilerplate) ----
+/** The PR's risk-ordered diff (file groups + per-file finding overlay). Composed
+   server-side from the PR files + the latest review's findings — no LLM call.
+   Works before any review (empty finding overlay); refetched when reviews change. */
+export function useSmartDiff(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.smartDiff(prId),
+    queryFn: () => api.get<SmartDiff>(`/pulls/${prId}/smart-diff`),
+    enabled: !!prId,
+  });
+}
+
+/** Explicitly recompute the PR's intent (the "Recompute" button on IntentPanel).
+   Optimistically updates the cached intent on success; surfaces an error toast on failure. */
+export function useRegenerateIntent(prId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<PrIntentRecord>(`/pulls/${prId}/intent/regenerate`),
+    onSuccess: (data) => {
+      qc.setQueryData(qk.prIntent(prId), data);
+    },
+    onError: () => notify.error('Failed to recompute intent'),
   });
 }
 
@@ -132,6 +170,9 @@ export function useRunReview() {
       }),
     onSuccess: (_d, { prId }) => {
       qc.invalidateQueries({ queryKey: qk.reviews(prId) });
+      // The Smart Diff finding overlay is derived from the latest review — drop
+      // it so the "N findings" badges appear once the run's findings land.
+      qc.invalidateQueries({ queryKey: qk.smartDiff(prId) });
     },
   });
 }

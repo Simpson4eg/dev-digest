@@ -162,6 +162,9 @@ export interface GitHubClient {
   /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
   findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
+  /** Resolve the first linked issue from a PR body (closes/fixes/resolves #N).
+   *  Returns undefined when no match is found or the issue fetch fails. */
+  resolveLinkedIssue(repo: RepoRef, body: string): Promise<IssueMeta | undefined>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
 }

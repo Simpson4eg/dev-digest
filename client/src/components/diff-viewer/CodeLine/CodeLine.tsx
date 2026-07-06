@@ -14,11 +14,20 @@ export function CodeLine({
   path,
   threads,
   commenting,
+  anchorId,
+  highlight,
+  active,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
+  /** DOM id for scroll-to-line (finding badges / navigator scroll here). */
+  anchorId?: string;
+  /** Gutter marker when this line is within any finding's range. */
+  highlight?: boolean;
+  /** Pale full-row tint when this line is within the ACTIVE (jumped-to) finding. */
+  active?: boolean;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
@@ -37,11 +46,18 @@ export function CodeLine({
 
   return (
     <div
-      style={cs.rowWrap}
+      {...(anchorId ? { id: anchorId } : {})}
+      style={anchorId ? { ...cs.rowWrap, scrollMarginTop: 72 } : cs.rowWrap}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={lineRowFor(ln.kind)}>
+      <div
+        style={{
+          ...lineRowFor(ln.kind),
+          ...(active ? { background: "var(--warn-bg, rgba(210,153,34,0.15))" } : {}),
+          ...(highlight ? { boxShadow: "inset 3px 0 0 var(--warning-text, #d29922)" } : {}),
+        }}
+      >
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button

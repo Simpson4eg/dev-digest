@@ -6,6 +6,8 @@ import { z } from 'zod';
  */
 
 // ---- Intent ----
+// Note: the lab spec calls this field "summary"; we use "intent" for internal
+// consistency. Do NOT rename without a DB migration on the pr_intent table.
 export const Intent = z.object({
   intent: z.string(),
   in_scope: z.array(z.string()),

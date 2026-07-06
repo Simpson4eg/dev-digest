@@ -33,6 +33,7 @@ export function ReviewRunAccordion({
   targetRunId = null,
   targetNonce = 0,
   severityFilter,
+  focusedFindingId,
 }: {
   review: ReviewRecord;
   prId: string;
@@ -44,6 +45,9 @@ export function ReviewRunAccordion({
   targetRunId?: string | null;
   targetNonce?: number;
   severityFilter?: string | null;
+  /** Finding ID to auto-expand (from badge click in the diff tab). Opens this
+   *  accordion if the finding belongs to this run. */
+  focusedFindingId?: string | null;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
@@ -54,6 +58,14 @@ export function ReviewRunAccordion({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetRunId, targetNonce, review.run_id]);
+
+  // Auto-open this accordion when the focused finding belongs to this run.
+  React.useEffect(() => {
+    if (focusedFindingId && findings.some((f) => f.id === focusedFindingId)) {
+      setOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedFindingId]);
   const del = useDeleteReview(prId);
   const findings = review.findings;
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
@@ -131,6 +143,7 @@ export function ReviewRunAccordion({
             repoFullName={repoFullName}
             headSha={headSha}
             severityFilter={severityFilter}
+            focusedFindingId={focusedFindingId}
           />
         </div>
       )}

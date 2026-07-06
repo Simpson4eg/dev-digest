@@ -71,8 +71,16 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /**
+   * Derived PR intent/scope (Intent Layer) rendered before the diff so the model
+   * judges changes against the stated scope. Untrusted; delimiter-wrapped.
+   * Empty/undefined → section omitted (no behavior change).
+   */
+  intent?: string;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
+  /** Output language for the review's natural-language fields (→ assemblePrompt). */
+  language?: string;
   /** Override the structured-output retry budget. */
   maxRetries?: number;
   /** Override the map-reduce line threshold. */
@@ -135,7 +143,9 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    intent: input.intent,
     task: input.task,
+    language: input.language,
   };
 
   // Whole-diff assembly is the trace default; overwritten below for single-pass.

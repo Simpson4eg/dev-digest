@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, PrIntentRecord, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
@@ -8,6 +8,7 @@ import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
 import { runCostUsd } from './cost.js';
+import { loadDiff } from './diff-loader.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -180,6 +181,33 @@ export class ReviewService {
     return rows.map(({ review, findings }) =>
       reviewToDto(review, findings, review.agentId ? names.get(review.agentId) : null),
     );
+  }
+
+  /**
+   * The persisted Intent Layer result for a PR, or `null` when none has been
+   * derived yet (the client renders an empty state). Throws 404 only for an
+   * unknown/foreign PR (workspace-scoped via `getPull`).
+   */
+  async intentForPull(workspaceId: string, prId: string): Promise<PrIntentRecord | null> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const intent = await this.repo.getIntent(prId);
+    return intent ? { ...intent, pr_id: prId } : null;
+  }
+
+  /**
+   * Explicit intent recompute triggered by the user (the "Recompute" button).
+   * Unlike the best-effort pre-work in a review run, errors here are surfaced
+   * as 4xx/5xx so the user knows the button action failed.
+   */
+  async regenerateIntent(workspaceId: string, prId: string): Promise<PrIntentRecord> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repoRow = await this.repo.getRepo(pull.repoId);
+    if (!repoRow) throw new NotFoundError('Repo not found');
+    const diff = await loadDiff(this.container, this.repo, workspaceId, pull, repoRow);
+    const intent = await this.executor.recomputeIntent(workspaceId, pull, repoRow, diff);
+    return { ...intent, pr_id: prId };
   }
 
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {

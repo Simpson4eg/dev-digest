@@ -1,11 +1,13 @@
+import { isAbsolute } from 'node:path';
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import { reviewPullRequest, extractIntent, diffSkeleton, countBlockers, type ReviewEvent } from '@devdigest/reviewer-core';
+import { resolveFeatureModel } from '../settings/feature-models.js';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { REVIEW_STRATEGY } from './constants.js';
+import { REVIEW_STRATEGY, REVIEW_LANGUAGE } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 
@@ -33,6 +35,18 @@ export type RunOutcome = {
   grounding: string;
   raw: Review;
 };
+
+/** Compact, prompt-ready rendering of a derived Intent (motivation + scope). */
+function renderIntent(intent: Intent): string {
+  const parts = [intent.intent.trim()];
+  if (intent.in_scope.length > 0) {
+    parts.push(`In scope:\n${intent.in_scope.map((s) => `- ${s}`).join('\n')}`);
+  }
+  if (intent.out_of_scope.length > 0) {
+    parts.push(`Out of scope:\n${intent.out_of_scope.map((s) => `- ${s}`).join('\n')}`);
+  }
+  return parts.join('\n\n');
+}
 
 /**
  * Owns the background execution of queued agent runs (extracted from
@@ -104,6 +118,13 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // Intent Layer — a cheap pre-review pass shared by every queued run: derive
+    // the PR's motivation + scope from its body + diff, persist it, and feed it
+    // (as untrusted context) into each agent's prompt. Best-effort: an intent
+    // failure NEVER fails the review (it is enrichment, like the callers digest),
+    // so it is intentionally OUTSIDE the failAll path.
+    const intentText = await this.deriveIntent(workspaceId, pull, repo, diff, runLog);
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -111,7 +132,7 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, intentText);
         logger?.info(
           {
             runId,
@@ -143,6 +164,7 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    intentText?: string,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -223,7 +245,13 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Intent Layer — derived motivation + scope (untrusted). Omitted when the
+        // pre-work intent pass produced nothing (missing key, LLM error, …).
+        ...(intentText ? { intent: intentText } : {}),
         task,
+        // Pin the model's natural-language output to the product language (else
+        // some cheap models reply in their native language).
+        language: REVIEW_LANGUAGE,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
         checkCancelled: () => {
@@ -337,6 +365,175 @@ export class ReviewRunExecutor {
       this.container.runBus.complete(runId);
       throw err;
     }
+  }
+
+  /**
+   * Core intent computation — shared by the best-effort pre-work path
+   * (`deriveIntent`) and the explicit regenerate endpoint (`recomputeIntent`).
+   * Callers own error handling. Persists the result via `upsertIntent`.
+   */
+  private async computeIntent(
+    workspaceId: string,
+    pull: PullRow,
+    repo: typeof schema.repos.$inferSelect,
+    diff: UnifiedDiff,
+    logInfo: (msg: string) => void,
+    onEvent: (e: ReviewEvent) => void,
+  ): Promise<Intent> {
+    const im = await resolveFeatureModel(this.container, workspaceId, 'review_intent');
+    const llm = await this.container.llm(im.provider as Provider);
+
+    // ---- Gather plan[] best-effort from three sources -------------------------
+    const plan: string[] = [];
+
+    // Source 1: Linked ticket/issue — via the GitHubClient port (T7: de-duplicated
+    // from the private resolveLinkedIssue in octokit.ts).
+    if (pull.body) {
+      try {
+        const gh = await this.container.github();
+        const issue = await gh.resolveLinkedIssue({ owner: repo.owner, name: repo.name }, pull.body);
+        if (issue) {
+          const block = `Linked ticket #${issue.number} -- ${issue.title}\n${issue.body ?? ''}`;
+          if (block.trim().length > 0) plan.push(block);
+        }
+      } catch (err) {
+        logInfo(`intent: linked issue skipped -- ${(err as Error).message}`);
+      }
+    }
+
+    // Source 2: Linked repo spec/plan file -- scan PR body for repo-relative
+    // markdown/text paths. Cap each file at 8000 chars. Up to 2 distinct paths.
+    if (pull.body) {
+      try {
+        const rawPaths: string[] = [];
+        const mdLinkRe = /\[[^\]]*\]\(([^)]+)\)/g;
+        let mdMatch: RegExpExecArray | null;
+        while ((mdMatch = mdLinkRe.exec(pull.body)) !== null) {
+          rawPaths.push(mdMatch[1]!);
+        }
+        const bareRe = /\b([\w./-]+\.(?:md|mdx|txt|rst))\b/g;
+        let bareMatch: RegExpExecArray | null;
+        while ((bareMatch = bareRe.exec(pull.body)) !== null) {
+          rawPaths.push(bareMatch[1]!);
+        }
+
+        // Filter: keep only repo-relative paths (no http(s)://, no .., no absolute/rooted).
+        const seen = new Set<string>();
+        const candidatePaths = rawPaths
+          .map((p) => p.trim())
+          .filter((p) => {
+            if (!p) return false;
+            if (/^https?:\/\//i.test(p)) return false;
+            if (p.includes('..')) return false;
+            if (isAbsolute(p)) return false;
+            if (/^[/\\]/.test(p)) return false;
+            if (/^[a-zA-Z]:/.test(p)) return false;
+            if (!/\.(?:md|mdx|txt|rst)$/i.test(p)) return false;
+            const normalized = p.replace(/^\.\//, '');
+            if (seen.has(normalized)) return false;
+            seen.add(normalized);
+            return true;
+          })
+          .slice(0, 2);
+
+        for (const filePath of candidatePaths) {
+          try {
+            const text = await this.container.git.readFile(
+              { owner: repo.owner, name: repo.name },
+              filePath,
+            );
+            const capped = text.slice(0, 8000);
+            if (capped.trim().length > 0) {
+              plan.push(`Spec file ${filePath}:\n${capped}`);
+            }
+          } catch (err) {
+            logInfo(`intent: spec file ${filePath} skipped -- ${(err as Error).message}`);
+          }
+        }
+      } catch (err) {
+        logInfo(`intent: spec file scan skipped -- ${(err as Error).message}`);
+      }
+    }
+
+    // Source 3: Embedded long plan
+    if (pull.body && pull.body.length > 4000) {
+      const block = `Full PR description:\n${pull.body}`;
+      if (block.trim().length > 0) plan.push(block);
+    }
+
+    const cleanPlan = plan.filter((b) => b.trim().length > 0);
+    if (cleanPlan.length > 0) {
+      logInfo(`intent: attached ${cleanPlan.length} plan/spec source(s)`);
+    }
+    // ---- end gather ----------------------------------------------------------
+
+    const res = await extractIntent({
+      llm,
+      model: im.model,
+      diff,
+      title: pull.title,
+      ...(pull.body ? { prDescription: pull.body } : {}),
+      ...(cleanPlan.length > 0 ? { plan: cleanPlan } : {}),
+      sessionId: `${repo.owner}/${repo.name}#${pull.number}:intent`,
+      language: REVIEW_LANGUAGE,
+      onEvent,
+    });
+
+    // T2 — log how many tokens the skeleton saves vs the full diff body.
+    try {
+      const skeleton = diffSkeleton(diff);
+      const full = this.container.tokenizer.count(diff.raw);
+      const skeletonTokens = this.container.tokenizer.count(skeleton);
+      logInfo(`intent: diff skeleton saved ~${full - skeletonTokens} tokens (${full}->${skeletonTokens})`);
+    } catch {
+      // tokenizer failure is non-fatal
+    }
+
+    await this.repo.upsertIntent(pull.id, res.intent);
+    return res.intent;
+  }
+
+  /**
+   * Intent Layer pre-work: derive the PR's motivation + scope ONCE (shared by
+   * every queued run), persist it (`pr_intent`), and return a compact rendering
+   * to feed into each agent's prompt.
+   *
+   * Best-effort — any failure returns `undefined` so the review proceeds as
+   * before. Uses the workspace's `review_intent` model choice (Settings).
+   */
+  private async deriveIntent(
+    workspaceId: string,
+    pull: PullRow,
+    repo: typeof schema.repos.$inferSelect,
+    diff: UnifiedDiff,
+    runLog: RunLogger,
+  ): Promise<string | undefined> {
+    try {
+      const intent = await this.computeIntent(
+        workspaceId, pull, repo, diff,
+        (msg) => runLog.info(msg),
+        (e) => runLog.event(e.kind, e.msg, e.data),
+      );
+      return renderIntent(intent);
+    } catch (err) {
+      runLog.info(`intent: skipped -- ${(err as Error).message}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * Explicit intent recompute (for the `POST /pulls/:id/intent/regenerate`
+   * endpoint). Unlike `deriveIntent`, errors propagate to the caller so the
+   * HTTP handler can surface them as a 4xx/5xx. No SSE bus — the result is
+   * returned synchronously in the HTTP response.
+   */
+  async recomputeIntent(
+    workspaceId: string,
+    pull: PullRow,
+    repo: typeof schema.repos.$inferSelect,
+    diff: UnifiedDiff,
+  ): Promise<Intent> {
+    return this.computeIntent(workspaceId, pull, repo, diff, () => undefined, () => undefined);
   }
 
   /**

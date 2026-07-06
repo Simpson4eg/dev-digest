@@ -41,7 +41,16 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
   `usePrDetailPage`; `page.tsx` just renders what it returns. Add data/handlers to
   the hook, not the component body.
 
+- 2026-07-06 · Shared diff-viewer components (`FileCard`, `SmartDiffViewer`) take optional `onFindingClick?: (id: string) => void` rather than calling `useRouter` directly · evidence: `client/src/components/diff-viewer/FileCard/FileCard.tsx:95-107` + `client/src/app/repos/[repoId]/pulls/[number]/_lib/usePrDetailPage.ts:73-80`
+  `FileCard` lives under `components/` (shared across routes) so it cannot know the `?tab=findings&finding=<id>` URL shape. Pattern: pass navigation as an optional callback from the page layer (`usePrDetailPage.goToFinding`) → DiffTab → SmartDiffViewer → FileCard. When the callback is absent the badge falls back to scroll-to-line. Receiver (`FindingsPanel`) uses `defaultExpanded={f.id === focusedFindingId}` because tab-switching causes a full remount — no `forceExpanded` controlled-state needed.
+
+- 2026-07-05 · Smart-Diff overlay reuses the shared diff-viewer `FileCard`/`CodeLine` via OPTIONAL props (`findingLines`, `summary`, `anchorId`, `highlight`); a finding's line number is the NEW-file number (`Line.newNo` from `parsePatch`), and scroll anchors use `lineAnchorId(path, newNo)` = `sd-<path>-L<n>` · evidence: `client/src/components/diff-viewer/FileCard/FileCard.tsx:34,158` + `client/src/components/diff-viewer/helpers.ts:4-9`
+  Findings carry `start_line` in NEW-file numbering, which matches `Line.newNo` (hunk and `del`-only lines have no `newNo` and are never anchored). To jump-to-line anywhere in the diff viewer, reuse `lineAnchorId` + `document.getElementById(...)` then `?.scrollIntoView?.(...)` (guard the call — jsdom doesn't implement it). All props are optional, so the plain Files-changed `DiffViewer` path is untouched.
+
 ## Tool & Library Notes
+
+- 2026-07-05 · Rendering any diff-viewer `FileCard` (hence `SmartDiffViewer`) in a test needs `NextIntlClientProvider` with messages keyed under the `shell` namespace — `messages={{ shell: <messages/en/shell.json> }}` — because `FileCard` calls `useTranslations("shell")` · evidence: `client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/SmartDiffViewer/SmartDiffViewer.test.tsx`
+  Passing the raw `shell.json` (not wrapped under a `shell:` key) resolves nothing and next-intl throws/falls back. The provider-map namespace must match the `useTranslations(<ns>)` argument of every component under test.
 
 - 2026-06-29 · Moving a component folder breaks every absolute `@/` import that names the old path, including ones inside the component itself · evidence: `client/src/app/repos/[repoId]/pulls/[number]/_components/trace/RunTraceDrawer/_components/TraceBody/TraceBody.tsx:9-12`
   RunTraceDrawer's sub-components (`ToolCallRow`, `TraceBody`, `TraceSection`, `FindingsSection`, `PromptBlock`) used `@/app/repos/.../RunTraceDrawer/styles` etc. — all broke after `RunTraceDrawer/` moved to `trace/RunTraceDrawer/`. Before any folder rename, grep the old path in the codebase; `@/` aliases are invisible to simple `../` diffing.

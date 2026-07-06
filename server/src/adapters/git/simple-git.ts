@@ -1,5 +1,5 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { mkdir, readFile, access, rm } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type {
@@ -127,7 +127,15 @@ export class SimpleGitClient implements GitClient {
   }
 
   async readFile(repo: RepoRef, path: string): Promise<string> {
-    return readFile(join(this.clonePathFor(repo), path), 'utf8');
+    const cloneDir = this.clonePathFor(repo);
+    const resolved = resolve(join(cloneDir, path));
+    // Ensure the resolved path stays strictly inside the clone directory.
+    // Trailing sep prevents a clone at /a/b matching a path like /a/bEvil/x.
+    const base = cloneDir.endsWith(sep) ? cloneDir : cloneDir + sep;
+    if (!resolved.startsWith(base)) {
+      throw new Error(`Path "${path}" escapes the clone directory`);
+    }
+    return readFile(resolved, 'utf8');
   }
 }
 

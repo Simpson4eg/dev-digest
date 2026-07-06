@@ -17,6 +17,7 @@ export {
   usePrActiveRuns,
   usePrRuns,
   usePrReviews,
+  useIntent,
   useDeleteRun,
   useCancelRun,
   useDeleteReview,

@@ -124,6 +124,25 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     });
   }
 
+  /** App whose openai mock answers BOTH the Review and the Intent schema. */
+  function appWithSchemas(structuredBySchema: Record<string, unknown>) {
+    return buildApp({
+      config: config(),
+      db: pg.handle.db,
+      overrides: {
+        embedder: new MockEmbedder(),
+        git: new MockGitClient({ diff: DIFF }),
+        llm: { openai: new MockLLMProvider('openai', { structuredBySchema }) },
+      },
+    });
+  }
+
+  const INTENT_FIXTURE = {
+    intent: 'Add rate limiting to public API endpoints to prevent abuse.',
+    in_scope: ['Add middleware for rate limiting', 'Apply to /api/public/* routes'],
+    out_of_scope: ['Authentication changes'],
+  };
+
   it('agents CRUD', async () => {
     const app = await appWith(REVIEW_FIXTURE);
 
@@ -209,6 +228,85 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(run!.findingsCount).toBe(1);
     expect(run!.grounding).toBe('1/2 passed');
 
+    await app.close();
+  });
+
+  it('Intent Layer: derives + persists intent before review; GET /pulls/:id/intent serves it', async () => {
+    // Point the review_intent feature at the mocked openai provider (the registry
+    // default is openrouter, which isn't overridden here), and give the mock an
+    // Intent fixture for the pre-review pass + a Review fixture for the review.
+    const app = await appWithSchemas({ Intent: INTENT_FIXTURE, Review: REVIEW_FIXTURE });
+    await app.inject({
+      method: 'PUT',
+      url: '/settings',
+      payload: { feature_models: { review_intent: { provider: 'openai', model: 'gpt-4.1' } } },
+    });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    // Before any run: no intent yet → the endpoint returns null (empty state).
+    const before = await app.inject({ method: 'GET', url: `/pulls/${pr.id}/intent` });
+    expect(before.statusCode).toBe(200);
+    expect(before.json()).toBeNull();
+
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'IntentRev', provider: 'openai', model: 'gpt-4.1', system_prompt: 'rev' },
+      })
+    ).json();
+    const started = (
+      await app.inject({ method: 'POST', url: `/pulls/${pr.id}/review`, payload: { agentId: agent.id } })
+    ).json();
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+
+    // After the run: the derived intent is persisted and served with pr_id.
+    const after = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/intent` })).json();
+    expect(after).toMatchObject({ ...INTENT_FIXTURE, pr_id: pr.id });
+
+    // The review still succeeds (intent is enrichment, not a gate).
+    const reviews = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/reviews` })).json();
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0].findings).toHaveLength(1);
+
+    // The derived intent was actually injected (untrusted) into the review prompt.
+    const trace = (
+      await app.inject({ method: 'GET', url: `/runs/${started.runs[0].run_id}/trace` })
+    ).json();
+    expect(trace.prompt_assembly.user).toContain('## Derived intent');
+    expect(trace.prompt_assembly.user).toContain('<untrusted source="intent">');
+    expect(trace.prompt_assembly.user).toContain(INTENT_FIXTURE.intent);
+
+    await app.close();
+  });
+
+  it('GET /pulls/:id/intent 404s for an unknown / foreign PR', async () => {
+    const app = await appWith(REVIEW_FIXTURE);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/pulls/00000000-0000-0000-0000-000000000000/intent',
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('Intent Layer is best-effort: a missing intent provider never fails the review', async () => {
+    // review_intent stays on the registry default (openrouter) with NO override,
+    // so container.llm('openrouter') throws (no key) — the intent pass is skipped
+    // and the review completes normally, with no intent row.
+    const app = await appWith(REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'NoIntentRev', provider: 'openai', model: 'gpt-4.1', system_prompt: 'rev' },
+      })
+    ).json();
+    await app.inject({ method: 'POST', url: `/pulls/${pr.id}/review`, payload: { agentId: agent.id } });
+    const [run] = await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    expect(run!.status).toBe('done');
+    expect((await app.inject({ method: 'GET', url: `/pulls/${pr.id}/intent` })).json()).toBeNull();
     await app.close();
   });
 

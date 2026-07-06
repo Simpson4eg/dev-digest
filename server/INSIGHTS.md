@@ -17,7 +17,13 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 
 ## What Doesn't Work
 
+- 2026-07-04 · In `reviews.it.test.ts` the intent pre-work is silently skipped unless you point `review_intent` at a MOCKED provider — its registry default is `openrouter`, which the tests don't override · evidence: `server/test/reviews.it.test.ts` (Intent Layer test) + `server/src/modules/reviews/run-executor.ts` `deriveIntent`
+  `deriveIntent` is best-effort: `container.llm('openrouter')` throws (no key in test) → intent is caught + skipped → `pr_intent` stays empty. To actually exercise it, `PUT /settings` with `feature_models.review_intent = { provider: 'openai', model: 'gpt-4.1' }` AND feed the mock a `structuredBySchema: { Intent: <fixture>, Review: <fixture> }` (MockLLMProvider validates the fixture against the passed schema, so the Intent fixture must match the `Intent` shape, not `Review`). Otherwise you'll wrongly conclude the wiring is broken.
+
 ## Codebase Patterns
+
+- 2026-07-04 · The Intent Layer was fully scaffolded but DEAD until wired in run-executor — `pr_intent` table, `upsertIntent`/`getIntent`, the `review_intent` registry entry, and the `Intent`/`PrIntentRecord` contracts all pre-existed with NO code path generating or serving intent · evidence: `server/src/modules/reviews/run-executor.ts:62-70` (comment said "Loads the diff + intent once" but only the diff was loaded)
+  Pattern for such "half-built feature" registry entries (e.g. `risk_brief`, `conformance` in `FEATURE_MODELS`): the contract + table + repo methods may already exist — grep for them before adding new ones. Wiring point is `executeRuns` shared pre-work: `resolveFeatureModel(container, workspaceId, <feature>)` → `container.llm(provider)` → the pure pass → persist. Keep it best-effort (try/catch → `runLog.info('… skipped')`), OUTSIDE `failAll`, so enrichment never fails the review.
 
 - 2026-06-29 · `agent_skills` has no `workspace_id`; tenant safety must be enforced before writes and through joined reads · evidence: `server/src/modules/agents/service.ts:162`
   Validate every requested skill id against the agent's workspace before replacing links, and filter linked-skill reads by `skills.workspace_id`. A valid foreign UUID otherwise satisfies both FKs and creates a cross-workspace prompt-instruction leak.
@@ -32,6 +38,12 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 - 2026-06-20 · New fields on `RunSummary` (Zod contract returned by repo) MUST be `.nullable().optional()`, not just `.nullable()` — repo layer can't fill them, service layer enriches.
   evidence: `server/src/vendor/shared/contracts/trace.ts:94-114` + `server/src/modules/reviews/repository/run.repo.ts:51`
   The repo returns `RunSummary[]` typed from the schema; if a field is required (even nullable), TS fails compilation because repo doesn't set it. Service `listRuns()` wraps the repo output and adds derived fields (cost_usd from PriceBook). Pattern: derived/enriched fields go `.nullable().optional()`; the service layer overwrites the optional.
+
+- 2026-07-05 · Read-time "brief" features (Smart Diff) are their own module that COMPOSES already-persisted data with zero LLM + zero persistence — split a pure `compose.ts` from a DB-reading `service.ts` so the core is hermetically testable · evidence: `server/src/modules/smart-diff/compose.ts` (pure `(files, findings) => SmartDiff`) + `server/src/modules/smart-diff/service.ts:34-45`
+  Unlike the Intent Layer (which ADDS a cheap LLM pass — see the 2026-07-04 note), Smart Diff must never touch `container.llm`: the service only reads `prFiles` + the LATEST review's findings (`reviewsForPull` is newest-first → `.find(r => r.review.kind === 'review')`) and delegates to the pure composer. Route `GET /pulls/:id/smart-diff` lives in a dedicated module registered in `modules/index.ts`. Reuse this shape for upcoming blast/brief read features: pure core + thin DB service, unit-test the core with plain arrays (no `Container`).
+
+- 2026-07-05 · The reviews domain persists NO per-file summary — only whole-PR `reviews.summary` + per-file `findings` (file/start_line/severity/title) · evidence: `server/src/db/schema/reviews.ts:22` (summary) + `:28-46` (findings)
+  So any per-file "what this does" line (e.g. Smart Diff's `pseudocode_summary`) can only be REUSED from findings (we take the highest-severity finding's title) or needs a new model call — no neutral per-file description is stored anywhere. Don't assume one exists because a design mock shows it.
 
 ## Tool & Library Notes
 
@@ -60,6 +72,9 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
   pass on Linux CI but fail locally on Windows. Fix when next touching: use
   `path.dirname(full)` for the mkdir target instead of slicing on a hardcoded
   separator. Do NOT block doc-only commits on these failures.
+
+- 2026-07-05 · `path.isAbsolute('/etc/passwd')` returns `false` on Windows — root-relative paths bypass the POSIX-only guard · evidence: `server/src/modules/reviews/run-executor.ts` candidate-path filter + `server/src/adapters/git/simple-git.ts:129-137`
+  On Windows, Node's `path.isAbsolute` treats leading-`/` paths as root-relative (relative to the current drive), not absolute — so `isAbsolute('/etc/passwd.md')` is `false`. For security filters on author-controlled paths, always add `/^[/\\]/` (rooted path) and `/^[a-zA-Z]:/` (Windows drive-letter) checks alongside `isAbsolute`. The PRIMARY defence is the adapter-level containment check in `SimpleGitClient.readFile` (resolve + startsWith base+sep), which catches everything regardless of platform. The secondary filter in `deriveIntent` is defence-in-depth but cannot be the only line of defence on Windows.
 
 ## Session Notes
 

@@ -10,3 +10,13 @@
  * model's context.
  */
 export const REVIEW_STRATEGY = 'single-pass' as const;
+
+/**
+ * Language for the model's natural-language OUTPUT — the review summary, finding
+ * titles/rationale/suggestions, and the derived intent. Single policy knob: the
+ * studio UI is English today, so findings should be English too (cheap models
+ * such as DeepSeek otherwise drift to their native language). Change this one
+ * value — or wire it to config / the UI locale — when the product goes
+ * multi-lingual; the reviewer engine itself is language-agnostic.
+ */
+export const REVIEW_LANGUAGE = 'English';
