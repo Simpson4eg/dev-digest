@@ -126,3 +126,20 @@ describe('assemblePrompt — scope rule (T3 / Intent Layer)', () => {
     expect(systemOf({ system: 'sys', diff: 'DIFF', intent: '   ' })).toBe(base);
   });
 });
+
+describe('assemblePrompt — output language', () => {
+  it('pins the output language in the system message when provided', () => {
+    const sys = systemOf({ system: 'sys', diff: 'DIFF', language: 'English' });
+    expect(sys).toMatch(/OUTPUT LANGUAGE/);
+    expect(sys).toMatch(/in English/);
+    // Code identifiers/paths must stay verbatim (don't translate the code).
+    expect(sys).toMatch(/verbatim/i);
+  });
+
+  it('leaves the system message byte-identical when language is absent or blank', () => {
+    const base = systemOf({ system: 'sys', diff: 'DIFF' });
+    expect(base).not.toMatch(/OUTPUT LANGUAGE/);
+    expect(systemOf({ system: 'sys', diff: 'DIFF', language: undefined })).toBe(base);
+    expect(systemOf({ system: 'sys', diff: 'DIFF', language: '  ' })).toBe(base);
+  });
+});

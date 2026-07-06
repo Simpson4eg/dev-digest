@@ -79,6 +79,8 @@ export interface ReviewInput {
   intent?: string;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
+  /** Output language for the review's natural-language fields (→ assemblePrompt). */
+  language?: string;
   /** Override the structured-output retry budget. */
   maxRetries?: number;
   /** Override the map-reduce line threshold. */
@@ -143,6 +145,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     prDescription: input.prDescription,
     intent: input.intent,
     task: input.task,
+    language: input.language,
   };
 
   // Whole-diff assembly is the trace default; overwritten below for single-pass.

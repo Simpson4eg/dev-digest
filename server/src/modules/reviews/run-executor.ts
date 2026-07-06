@@ -7,7 +7,7 @@ import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { REVIEW_STRATEGY } from './constants.js';
+import { REVIEW_STRATEGY, REVIEW_LANGUAGE } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 
@@ -249,6 +249,9 @@ export class ReviewRunExecutor {
         // pre-work intent pass produced nothing (missing key, LLM error, …).
         ...(intentText ? { intent: intentText } : {}),
         task,
+        // Pin the model's natural-language output to the product language (else
+        // some cheap models reply in their native language).
+        language: REVIEW_LANGUAGE,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
         checkCancelled: () => {
@@ -472,6 +475,7 @@ export class ReviewRunExecutor {
       ...(pull.body ? { prDescription: pull.body } : {}),
       ...(cleanPlan.length > 0 ? { plan: cleanPlan } : {}),
       sessionId: `${repo.owner}/${repo.name}#${pull.number}:intent`,
+      language: REVIEW_LANGUAGE,
       onEvent,
     });
 

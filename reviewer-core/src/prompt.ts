@@ -88,6 +88,22 @@ export interface PromptParts {
   diff: string;
   /** Optional task framing line, e.g. "Review PR #482 '…'". */
   task?: string;
+  /**
+   * Language for the model's natural-language OUTPUT (summary, finding titles,
+   * rationale, suggestions). The consumer owns this policy (the studio/CI passes
+   * the product/UI language). Omitted → the model chooses (legacy behaviour;
+   * cheap models like DeepSeek then drift to their native language).
+   */
+  language?: string;
+}
+
+/** Trusted rule pinning the model's natural-language output to one language. */
+function outputLanguageRule(language: string): string {
+  return (
+    `OUTPUT LANGUAGE — Write every natural-language field you produce (the summary, ` +
+    `finding titles, rationale, and suggestions) in ${language}. Keep code identifiers, ` +
+    `file paths, and quoted diff/code snippets verbatim in their original form.`
+  );
 }
 
 export interface AssembledPrompt {
@@ -102,7 +118,11 @@ export interface AssembledPrompt {
  */
 export function assemblePrompt(parts: PromptParts): AssembledPrompt {
   const hasIntent = !!parts.intent && parts.intent.trim().length > 0;
-  const system = `${parts.system}\n\n${INJECTION_GUARD}${hasIntent ? `\n\n${SCOPE_RULE}` : ''}`;
+  const hasLanguage = !!parts.language && parts.language.trim().length > 0;
+  const system =
+    `${parts.system}\n\n${INJECTION_GUARD}` +
+    `${hasIntent ? `\n\n${SCOPE_RULE}` : ''}` +
+    `${hasLanguage ? `\n\n${outputLanguageRule(parts.language!.trim())}` : ''}`;
 
   const skillsBlock =
     parts.skills && parts.skills.length > 0 ? parts.skills.join('\n\n') : undefined;

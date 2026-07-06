@@ -94,6 +94,8 @@ export interface ExtractIntentInput {
   plan?: string[];
   /** OpenRouter session id -- groups this call with the review's chunks. */
   sessionId?: string;
+  /** Output language for the derived intent's natural-language fields. */
+  language?: string;
   /** Override the structured-output retry budget. */
   maxRetries?: number;
   /** Progress sink (server -> SSE bus, runner -> log). */
@@ -132,6 +134,7 @@ export async function extractIntent(input: ExtractIntentInput): Promise<ExtractI
     diff: skeleton,
     ...(description ? { prDescription: description } : {}),
     ...(input.plan && input.plan.length > 0 ? { specs: input.plan } : {}),
+    ...(input.language ? { language: input.language } : {}),
     task: 'Reconstruct the intent and scope of this pull request.',
   });
 
