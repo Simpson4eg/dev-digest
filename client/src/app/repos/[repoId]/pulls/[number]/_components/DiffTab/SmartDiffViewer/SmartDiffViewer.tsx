@@ -10,6 +10,7 @@ import React from "react";
 import type { CSSProperties } from "react";
 import { Icon } from "@devdigest/ui";
 import { FileCard } from "@/components/diff-viewer/FileCard";
+import { RevealContext, type DiffFinding } from "@/components/diff-viewer";
 import type { PrFile, SmartDiff } from "@/lib/types";
 
 type Role = SmartDiff["groups"][number]["role"];
@@ -66,9 +67,26 @@ const st = {
   } satisfies CSSProperties,
 } as const;
 
-function Group({ role, files, byPath }: { role: Role; files: SmartDiff["groups"][number]["files"]; byPath: Map<string, PrFile> }) {
+function Group({
+  role,
+  files,
+  byPath,
+  findingsByPath,
+}: {
+  role: Role;
+  files: SmartDiff["groups"][number]["files"];
+  byPath: Map<string, PrFile>;
+  findingsByPath: Map<string, DiffFinding[]>;
+}) {
   const meta = ROLE_META[role];
   const [collapsed, setCollapsed] = React.useState(meta.defaultCollapsed);
+
+  // Auto-expand this group when the finding-navigator jumps to a file inside it
+  // (so a finding in a collapsed group — e.g. boilerplate — is still reachable).
+  const reveal = React.useContext(RevealContext);
+  React.useEffect(() => {
+    if (reveal && files.some((f) => f.path === reveal.path)) setCollapsed(false);
+  }, [reveal, files]);
 
   return (
     <section>
@@ -97,7 +115,7 @@ function Group({ role, files, byPath }: { role: Role; files: SmartDiff["groups"]
               <FileCard
                 key={f.path}
                 file={pr}
-                findingLines={f.finding_lines}
+                findings={findingsByPath.get(f.path)}
                 summary={f.pseudocode_summary ?? null}
               />
             );
@@ -108,7 +126,15 @@ function Group({ role, files, byPath }: { role: Role; files: SmartDiff["groups"]
   );
 }
 
-export function SmartDiffViewer({ smartDiff, files }: { smartDiff: SmartDiff; files: PrFile[] }) {
+export function SmartDiffViewer({
+  smartDiff,
+  files,
+  findingsByPath,
+}: {
+  smartDiff: SmartDiff;
+  files: PrFile[];
+  findingsByPath: Map<string, DiffFinding[]>;
+}) {
   const byPath = React.useMemo(() => {
     const m = new Map<string, PrFile>();
     for (const f of files) m.set(f.path, f);
@@ -135,7 +161,7 @@ export function SmartDiffViewer({ smartDiff, files }: { smartDiff: SmartDiff; fi
         </div>
       )}
       {smartDiff.groups.map((g) => (
-        <Group key={g.role} role={g.role} files={g.files} byPath={byPath} />
+        <Group key={g.role} role={g.role} files={g.files} byPath={byPath} findingsByPath={findingsByPath} />
       ))}
     </div>
   );

@@ -16,15 +16,18 @@ export function CodeLine({
   commenting,
   anchorId,
   highlight,
+  active,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
-  /** DOM id for scroll-to-line (Smart Diff finding badges scroll here). */
+  /** DOM id for scroll-to-line (finding badges / navigator scroll here). */
   anchorId?: string;
-  /** Tint + gutter marker when the reviewer flagged this line. */
+  /** Gutter marker when this line is within any finding's range. */
   highlight?: boolean;
+  /** Pale full-row tint when this line is within the ACTIVE (jumped-to) finding. */
+  active?: boolean;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
@@ -44,16 +47,16 @@ export function CodeLine({
   return (
     <div
       {...(anchorId ? { id: anchorId } : {})}
-      style={cs.rowWrap}
+      style={anchorId ? { ...cs.rowWrap, scrollMarginTop: 72 } : cs.rowWrap}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
       <div
-        style={
-          highlight
-            ? { ...lineRowFor(ln.kind), boxShadow: "inset 3px 0 0 var(--warning-text, #d29922)" }
-            : lineRowFor(ln.kind)
-        }
+        style={{
+          ...lineRowFor(ln.kind),
+          ...(active ? { background: "var(--warn-bg, rgba(210,153,34,0.15))" } : {}),
+          ...(highlight ? { boxShadow: "inset 3px 0 0 var(--warning-text, #d29922)" } : {}),
+        }}
       >
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (

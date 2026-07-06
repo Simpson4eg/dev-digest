@@ -2,13 +2,21 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { PrFile, SmartDiff } from "@devdigest/shared";
+import type { DiffFinding } from "@/components/diff-viewer";
 import messages from "../../../../../../../../../messages/en/shell.json";
 import { SmartDiffViewer } from "./SmartDiffViewer";
 
-function renderViewer(smartDiff: SmartDiff, files: PrFile[]) {
+const FINDINGS = new Map<string, DiffFinding[]>([
+  [
+    "src/middleware/ratelimit.ts",
+    [{ id: "f1", severity: "CRITICAL", title: "Token bucket off-by-one", rationale: "loop bound", suggestion: null, startLine: 2, endLine: 2 }],
+  ],
+]);
+
+function renderViewer(smartDiff: SmartDiff, files: PrFile[], findings = FINDINGS) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ shell: messages }}>
-      <SmartDiffViewer smartDiff={smartDiff} files={files} />
+      <SmartDiffViewer smartDiff={smartDiff} files={files} findingsByPath={findings} />
     </NextIntlClientProvider>,
   );
 }
@@ -96,7 +104,7 @@ describe("SmartDiffViewer", () => {
     };
     rerender(
       <NextIntlClientProvider locale="en" messages={{ shell: messages }}>
-        <SmartDiffViewer smartDiff={big} files={FILES} />
+        <SmartDiffViewer smartDiff={big} files={FILES} findingsByPath={FINDINGS} />
       </NextIntlClientProvider>,
     );
     expect(screen.getByText(/large enough to be hard to review/i)).toBeInTheDocument();
