@@ -87,6 +87,7 @@ export default function PRDetailPage() {
             onOpenTrace={page.onOpenTrace}
             onDelete={page.onDeleteRun}
             onRunDone={page.onRunDone}
+            focusedFindingId={page.focusedFindingId}
           />
         )}
 
@@ -96,6 +97,7 @@ export default function PRDetailPage() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            onFindingClick={page.goToFinding}
           />
         )}
       </div>

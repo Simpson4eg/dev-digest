@@ -17,6 +17,9 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 
 ## What Doesn't Work
 
+- 2026-07-06 · `PromptAssembly` Zod schema can drift from `assemblePrompt()`'s object literal — silently strips the field from stored traces · evidence: `reviewer-core/src/prompt.ts:171-181` + `server/src/vendor/shared/contracts/trace.ts:39-55`
+  `assemblePrompt` populated `intent: parts.intent ?? null` but the Zod schema had no `intent` field. Because fastify-type-provider-zod strips unknown keys on serialization (`z.object` strips extras by default), the `intent` value was dropped before persistence — no TS error, no runtime error. Fix: add `intent: z.string().nullish()` to `PromptAssembly` AND sync the vendored client copy. Pattern: whenever you add a field to the assembly object in `prompt.ts`, immediately add the matching field to `PromptAssembly` in `trace.ts` (both copies). A roundtrip test that parses a filled assembly through the schema would catch this class of bug.
+
 - 2026-06-23 · OpenAI SDK 4.x ships node-fetch v2 as its default fetch shim — on Node 22+/24 this causes "Premature close" reading chunked OpenRouter responses · evidence: `reviewer-core/src/llm/openrouter.ts:51-60`
   The SDK resolves `_shims/auto/runtime.js` → `web-runtime.js` → node-fetch v2.7.0 even when Node's native fetch (undici) is available. node-fetch v2 has a bug reading chunked HTTP bodies on Node 22+ — gets HTTP 200 then throws "Premature close" before the body is consumed. Fix everywhere: pass `fetch: globalThis.fetch` to `new OpenAI({...})`. Diagnose by inspecting `client.fetch.toString()` — if the output mentions "native promise missing", you're on node-fetch v2.
 

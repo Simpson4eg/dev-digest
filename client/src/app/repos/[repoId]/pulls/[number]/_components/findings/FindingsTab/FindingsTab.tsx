@@ -55,6 +55,8 @@ interface FindingsTabProps {
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
+  /** Finding ID to auto-expand and scroll to (from badge click in the diff tab). */
+  focusedFindingId?: string | null;
 }
 
 export function FindingsTab({
@@ -71,6 +73,7 @@ export function FindingsTab({
   onOpenTrace,
   onDelete,
   onRunDone,
+  focusedFindingId,
 }: FindingsTabProps) {
   const [activeSeverity, setActiveSeverity] = React.useState<Severity | null>(null);
 
@@ -205,6 +208,7 @@ export function FindingsTab({
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
             severityFilter={activeSeverity}
+            focusedFindingId={focusedFindingId}
           />
         ))
       )}

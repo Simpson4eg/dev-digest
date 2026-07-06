@@ -97,6 +97,7 @@ export function FileCard({
   commenting,
   findings,
   summary,
+  onFindingClick,
 }: {
   file: PrFile;
   commenting?: DiffCommentApi;
@@ -104,6 +105,9 @@ export function FileCard({
   findings?: DiffFinding[];
   /** One-line "what the reviewer flagged" summary (Smart Diff), reused from findings. */
   summary?: string | null;
+  /** Navigate to the finding in the Findings tab. When provided, badge click calls
+   *  this instead of scrolling to the line in the diff. */
+  onFindingClick?: (findingId: string) => void;
 }) {
   const t = useTranslations("shell");
   const list = React.useMemo(() => findings ?? [], [findings]);
@@ -194,8 +198,15 @@ export function FileCard({
           >
             <button
               type="button"
-              onClick={scrollToFirstFinding}
-              title="Jump to the first flagged line"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onFindingClick && findingCount > 0) {
+                  onFindingClick(list[0]!.id);
+                } else {
+                  scrollToFirstFinding(e);
+                }
+              }}
+              title={onFindingClick ? "Open finding in Findings tab" : "Jump to the first flagged line"}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

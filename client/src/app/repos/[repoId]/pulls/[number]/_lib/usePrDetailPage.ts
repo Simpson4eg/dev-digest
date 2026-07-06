@@ -67,9 +67,10 @@ export function usePrDetailPage() {
     if (prId) qc.invalidateQueries({ queryKey: qk.prIntent(prId) });
   };
 
-  // ---- ?tab / ?trace query-param state ----
+  // ---- ?tab / ?trace / ?finding query-param state ----
   const tab = search.get("tab") ?? DEFAULT_TAB;
   const traceRunId = search.get("trace");
+  const focusedFindingId = search.get("finding");
   const setParam = (key: string, val: string | null) => {
     const sp = new URLSearchParams(search.toString());
     if (val == null) sp.delete(key);
@@ -77,6 +78,12 @@ export function usePrDetailPage() {
     router.replace(`/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`);
   };
   const setTab = (t: string) => setParam("tab", t);
+  const goToFinding = (findingId: string) => {
+    const sp = new URLSearchParams(search.toString());
+    sp.set("tab", FINDINGS_TAB);
+    sp.set("finding", findingId);
+    router.replace(`/repos/${repoId}/pulls/${number}?${sp.toString()}`);
+  };
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -120,14 +127,16 @@ export function usePrDetailPage() {
     findingsCount,
     // mutations
     cancel,
-    // tab / trace state
+    // tab / trace / finding state
     tab,
     traceRunId,
+    focusedFindingId,
     traceFindings: traceRun?.findings ?? [],
     traceAgentName: traceRun?.agent_name ?? null,
     githubUrl: (prNumber: number) => (repoFullName ? githubPrUrl(repoFullName, prNumber) : null),
     // handlers
     setTab,
+    goToFinding,
     retry: () => refetch(),
     onRunStart: () => setTab(FINDINGS_TAB),
     onRunsStarted: () => invalidateActiveRuns(),

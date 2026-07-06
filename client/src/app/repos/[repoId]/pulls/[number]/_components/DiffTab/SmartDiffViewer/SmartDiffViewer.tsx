@@ -72,11 +72,13 @@ function Group({
   files,
   byPath,
   findingsByPath,
+  onFindingClick,
 }: {
   role: Role;
   files: SmartDiff["groups"][number]["files"];
   byPath: Map<string, PrFile>;
   findingsByPath: Map<string, DiffFinding[]>;
+  onFindingClick?: (findingId: string) => void;
 }) {
   const meta = ROLE_META[role];
   const [collapsed, setCollapsed] = React.useState(meta.defaultCollapsed);
@@ -117,6 +119,7 @@ function Group({
                 file={pr}
                 findings={findingsByPath.get(f.path)}
                 summary={f.pseudocode_summary ?? null}
+                onFindingClick={onFindingClick}
               />
             );
           })}
@@ -130,10 +133,12 @@ export function SmartDiffViewer({
   smartDiff,
   files,
   findingsByPath,
+  onFindingClick,
 }: {
   smartDiff: SmartDiff;
   files: PrFile[];
   findingsByPath: Map<string, DiffFinding[]>;
+  onFindingClick?: (findingId: string) => void;
 }) {
   const byPath = React.useMemo(() => {
     const m = new Map<string, PrFile>();
@@ -161,7 +166,7 @@ export function SmartDiffViewer({
         </div>
       )}
       {smartDiff.groups.map((g) => (
-        <Group key={g.role} role={g.role} files={g.files} byPath={byPath} findingsByPath={findingsByPath} />
+        <Group key={g.role} role={g.role} files={g.files} byPath={byPath} findingsByPath={findingsByPath} onFindingClick={onFindingClick} />
       ))}
     </div>
   );

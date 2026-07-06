@@ -23,11 +23,13 @@ interface DiffTabProps {
   files: PrFile[];
   /** Inline commenting is offered only on open PRs (GitHub rejects otherwise). */
   canComment?: boolean;
+  /** Navigate to the Findings tab with the given finding ID focused/expanded. */
+  onFindingClick?: (findingId: string) => void;
 }
 
 type DiffOrder = "smart" | "original";
 
-export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
+export function DiffTab({ prId, filesCount, files, canComment, onFindingClick }: DiffTabProps) {
   const { data: comments } = usePrComments(prId);
   const { data: smartDiff } = useSmartDiff(prId);
   const { data: reviews } = usePrReviews(prId);
@@ -244,7 +246,7 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
       </SectionLabel>
       <RevealContext.Provider value={reveal}>
         {smartActive ? (
-          <SmartDiffViewer smartDiff={smartDiff} files={files} findingsByPath={findingsByPath} />
+          <SmartDiffViewer smartDiff={smartDiff} files={files} findingsByPath={findingsByPath} onFindingClick={onFindingClick} />
         ) : (
           <DiffViewer files={files} commenting={commenting} findingsByPath={findingsByPath} />
         )}

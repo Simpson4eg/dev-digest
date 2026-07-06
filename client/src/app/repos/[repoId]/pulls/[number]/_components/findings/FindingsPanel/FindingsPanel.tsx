@@ -18,17 +18,28 @@ export function FindingsPanel({
   repoFullName,
   headSha,
   severityFilter,
+  focusedFindingId,
 }: {
   findings: FindingRecord[];
   prId: string;
   repoFullName?: string | null;
   headSha?: string | null;
   severityFilter?: string | null;
+  /** Finding ID to auto-expand and scroll to (from badge click in the diff tab). */
+  focusedFindingId?: string | null;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
   const [hideLow, setHideLow] = React.useState(false);
   const [focusIdx, setFocusIdx] = React.useState(0);
+
+  // Scroll to and expand the focused finding on first render when navigating
+  // from a badge click in the diff tab.
+  React.useEffect(() => {
+    if (!focusedFindingId) return;
+    const el = document.querySelector<HTMLElement>(`[data-finding-id="${focusedFindingId}"]`);
+    el?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, [focusedFindingId]);
 
   const shown = React.useMemo(
     () => visibleFindings(findings, hideLow, severityFilter),
@@ -67,8 +78,8 @@ export function FindingsPanel({
             <FindingCard
               key={f.id}
               f={f}
-              focused={i === focusIdx}
-              defaultExpanded={i === 0}
+              focused={i === focusIdx || f.id === focusedFindingId}
+              defaultExpanded={focusedFindingId ? f.id === focusedFindingId : i === 0}
               pending={action.isPending}
               repoFullName={repoFullName}
               headSha={headSha}
