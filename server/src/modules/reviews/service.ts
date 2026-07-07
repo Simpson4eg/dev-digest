@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, PrIntentRecord, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, PrIntentRecord, RunEventKind, RunSummary, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
@@ -84,6 +84,22 @@ export class ReviewService {
   /** Delete one run from the history (+ its trace). */
   async deleteRun(workspaceId: string, runId: string): Promise<boolean> {
     return this.repo.deleteAgentRun(workspaceId, runId);
+  }
+
+  /** Fetch one run by id, workspace-scoped. Returns null when not found or
+   *  the run belongs to a different workspace. Includes cost_usd enrichment
+   *  in the same shape as one element of listRuns. */
+  async getRun(workspaceId: string, runId: string): Promise<RunSummary | null> {
+    const run = await this.repo.getRunById(workspaceId, runId);
+    if (!run) return null;
+    const pb = this.container.priceBook;
+    return {
+      ...run,
+      cost_usd: runCostUsd(
+        { model: run.model, tokensIn: run.tokens_in, tokensOut: run.tokens_out },
+        pb,
+      ),
+    };
   }
 
   /**

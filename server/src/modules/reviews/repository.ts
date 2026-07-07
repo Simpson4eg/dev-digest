@@ -82,6 +82,12 @@ export class ReviewRepository {
     return runRepo.listRunsForPull(this.db, workspaceId, prId);
   }
 
+  /** Fetch one run by id, workspace-scoped. Returns null when not found or
+   *  the run belongs to a different workspace. */
+  getRunById(workspaceId: string, runId: string): Promise<RunSummary | null> {
+    return runRepo.getRunById(this.db, workspaceId, runId);
+  }
+
   /** Delete one agent run (+ its trace via FK cascade). Workspace-scoped. */
   deleteAgentRun(workspaceId: string, runId: string): Promise<boolean> {
     return runRepo.deleteAgentRun(this.db, workspaceId, runId);

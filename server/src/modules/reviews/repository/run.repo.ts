@@ -36,6 +36,39 @@ export async function activeRunsForPull(
   }));
 }
 
+/** Fetch one run by id, scoped to the workspace. Returns null if not found or
+ *  belongs to a different workspace. */
+export async function getRunById(
+  db: Db,
+  workspaceId: string,
+  runId: string,
+): Promise<RunSummary | null> {
+  const rows = await db
+    .select({ run: t.agentRuns, agentName: t.agents.name })
+    .from(t.agentRuns)
+    .leftJoin(t.agents, eq(t.agents.id, t.agentRuns.agentId))
+    .where(and(eq(t.agentRuns.id, runId), eq(t.agentRuns.workspaceId, workspaceId)));
+  if (rows.length === 0) return null;
+  const { run, agentName } = rows[0]!;
+  return {
+    run_id: run.id,
+    agent_id: run.agentId,
+    agent_name: agentName ?? null,
+    provider: run.provider,
+    model: run.model,
+    status: run.status,
+    error: run.error,
+    duration_ms: run.durationMs,
+    tokens_in: run.tokensIn,
+    tokens_out: run.tokensOut,
+    findings_count: run.findingsCount,
+    grounding: run.grounding,
+    ran_at: run.ranAt ? run.ranAt.toISOString() : null,
+    score: run.score,
+    blockers: run.blockers,
+  };
+}
+
 /** All runs for a PR (any status), newest first — the PR run history. */
 export async function listRunsForPull(
   db: Db,

@@ -15,6 +15,7 @@ Cross-package code is shared via tsconfig path aliases.
 | `client/`         | `@devdigest/web`           | Next.js 15 (App Router) + React 19                | 3000 |
 | `reviewer-core/`  | `@devdigest/reviewer-core` | Pure review engine: diff → prompt → LLM → findings | —    |
 | `e2e/`            | `@devdigest/e2e`           | Deterministic browser e2e via agent-browser (no LLM) | —    |
+| `mcp/`            | `@devdigest/mcp`           | Local stdio MCP server; thin client over the API   | —    |
 
 `@devdigest/shared` is **not** a separate package — it lives at
 `server/src/vendor/shared` (Zod contracts, source of truth) and is vendored into
@@ -26,7 +27,8 @@ and the CI runner.
 
 ## Runtime
 
-- Node ≥ 22, pnpm ≥ 10 (server and client). `e2e/` and `reviewer-core/` use npm.
+- Node ≥ 22, pnpm ≥ 10 (server and client). `e2e/`, `reviewer-core/`, and
+  `mcp/` use npm.
 - Only Postgres runs in Docker; API and web run on the host.
 
 ## Bootstrap
@@ -67,6 +69,7 @@ that isn't already captured. Trivial work → no entry, say so explicitly.
 - `client/AGENTS.md`
 - `reviewer-core/AGENTS.md`
 - `e2e/AGENTS.md`
+- `mcp/AGENTS.md`
 
 Cross-package docs: `docs/agent-prompts/` (reviewer system prompts, model choice).
 

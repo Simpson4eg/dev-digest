@@ -18,6 +18,7 @@ contracts in `src/vendor/shared/contracts/`, wired through
 |             | GET    | `/reviews`                             | recent reviews                 |
 |             | POST   | `/findings/:id/accept`                 |                                |
 |             | POST   | `/findings/:id/dismiss`                |                                |
+|             | GET    | `/runs/:id`                            | single run status (workspace-scoped; 404 if unknown) |
 |             | GET    | `/runs/:id/events`                     | SSE — live run trace           |
 |             | GET    | `/runs/:id/trace`                      | persisted run trace            |
 | agents      | GET    | `/agents`                              |                                |
