@@ -50,7 +50,7 @@ export const Finding = z.object({
   category: FindingCategory,
   title: z.string(),
   file: z.string(),
-  start_line: z.number().int(),
+  line_start: z.number().int(),
   end_line: z.number().int(),
   rationale: z.string(), // markdown
   suggestion: z.string().nullish(), // markdown
