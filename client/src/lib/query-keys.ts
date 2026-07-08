@@ -51,6 +51,8 @@ export const qk = {
   prIntent: (prId: string | null | undefined) => ["pr-intent", prId] as const,
   /** Smart Diff: risk-ordered file groups + finding overlay for a PR. */
   smartDiff: (prId: string | null | undefined) => ["smart-diff", prId] as const,
+  /** Blast Radius: changed symbols → downstream callers → impacted endpoints. */
+  prBlastRadius: (prId: string | null | undefined) => ["pr-blast-radius", prId] as const,
 
   // ---- run trace ----
   runTrace: (runId: string | null | undefined) => ["run-trace", runId] as const,

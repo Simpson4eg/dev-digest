@@ -85,4 +85,102 @@ export const s = {
     color: "var(--text-secondary)",
     lineHeight: 1.45,
   } satisfies CSSProperties,
+
+  // ---- Blast Radius panel ----
+  blastBox: {
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    background: "var(--bg-elevated)",
+    padding: 18,
+    marginBottom: 24,
+  } satisfies CSSProperties,
+  blastEmpty: {
+    border: "1px dashed var(--border)",
+    borderRadius: 8,
+    padding: 18,
+    marginBottom: 24,
+    fontSize: 13,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  /** Count chips row under the header (symbols · callers · endpoints · crons). */
+  blastCounts: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 14,
+    marginBottom: 14,
+    fontSize: 12,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  blastCount: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+  } satisfies CSSProperties,
+  /** A degraded/partial-index badge (honest state, not a blank panel). */
+  blastBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 12,
+    color: "var(--text-muted)",
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+    padding: "4px 10px",
+    marginBottom: 14,
+  } satisfies CSSProperties,
+  /** One changed-symbol row (clickable to expand its callers). */
+  blastSymRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    background: "none",
+    border: "none",
+    padding: "8px 0",
+    cursor: "pointer",
+    textAlign: "left",
+    color: "var(--text-primary)",
+    borderTop: "1px solid var(--border)",
+  } satisfies CSSProperties,
+  blastSymName: {
+    fontFamily: "var(--font-mono, monospace)",
+    fontSize: 13,
+    fontWeight: 600,
+  } satisfies CSSProperties,
+  blastSymKind: {
+    fontSize: 11,
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+  } satisfies CSSProperties,
+  blastSymMeta: {
+    marginLeft: "auto",
+    fontSize: 12,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  /** The expanded caller tree under a symbol. */
+  blastCallers: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    padding: "2px 0 12px 22px",
+  } satisfies CSSProperties,
+  blastChips: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+    padding: "0 0 12px 22px",
+  } satisfies CSSProperties,
+  blastChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 12,
+    fontFamily: "var(--font-mono, monospace)",
+    color: "var(--text-secondary)",
+    background: "var(--bg-subtle, rgba(127,127,127,0.08))",
+    border: "1px solid var(--border)",
+    borderRadius: 5,
+    padding: "2px 8px",
+  } satisfies CSSProperties,
 } as const;

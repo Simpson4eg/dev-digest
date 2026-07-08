@@ -98,6 +98,38 @@ export interface TriggerReviewResult {
   runs: { run_id: string; agent_id: string; agent_name: string }[];
 }
 
+/** One caller of a changed symbol, from `GET /pulls/:id/blast`. */
+export interface BlastCallerDto {
+  name: string;
+  file: string;
+  line: number;
+}
+
+/** A changed symbol's downstream impact — who calls it + what it reaches. */
+export interface DownstreamImpactDto {
+  symbol: string;
+  callers: BlastCallerDto[];
+  endpoints_affected: string[];
+  crons_affected: string[];
+}
+
+/** A symbol declared in a changed file. */
+export interface ChangedSymbolDto {
+  name: string;
+  file: string;
+  kind: string;
+}
+
+/** PR blast radius, from `GET /pulls/:id/blast`. Zero-LLM read of repo-intel. */
+export interface BlastRadiusDto {
+  changed_symbols: ChangedSymbolDto[];
+  downstream: DownstreamImpactDto[];
+  summary: string;
+  /** True when the repo-intel index is absent/partial — panel shows a badge. */
+  degraded?: boolean;
+  reason?: string;
+}
+
 /**
  * The port. The concrete `HttpDevDigestApi` (Ring 3) implements it; everything
  * else depends only on this interface.
@@ -112,4 +144,6 @@ export interface DevDigestApi {
   getRun(runId: string): Promise<RunSummary | null>;
   reviewsForPull(prId: string): Promise<ReviewDto[]>;
   listConventions(repoId: string): Promise<Convention[]>;
+  /** PR blast radius via `GET /pulls/:id/blast`. */
+  getBlastRadius(prId: string): Promise<BlastRadiusDto>;
 }

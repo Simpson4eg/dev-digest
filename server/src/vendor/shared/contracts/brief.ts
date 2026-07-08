@@ -38,10 +38,26 @@ export const DownstreamImpact = z.object({
 });
 export type DownstreamImpact = z.infer<typeof DownstreamImpact>;
 
+/**
+ * Index health for the blast read. Mirrors repo-intel's DegradedReason so the UI
+ * can show an honest "index still building / repo too large" badge instead of a
+ * blank panel. Enriched by the service (never the repo), so both are `.optional()`.
+ */
+export const BlastDegradedReason = z.enum([
+  'flag_off',
+  'index_failed',
+  'index_partial',
+  'repo_too_large',
+  'no_data',
+]);
+export type BlastDegradedReason = z.infer<typeof BlastDegradedReason>;
+
 export const BlastRadius = z.object({
   changed_symbols: z.array(ChangedSymbol),
   downstream: z.array(DownstreamImpact),
   summary: z.string(),
+  degraded: z.boolean().optional(),
+  reason: BlastDegradedReason.optional(),
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
 

@@ -23,6 +23,7 @@ contracts in `src/vendor/shared/contracts/`, wired through
 |             | GET    | `/runs/:id/trace`                      | persisted run trace            |
 | agents      | GET    | `/agents`                              |                                |
 |             | GET    | `/agents/:id`                          |                                |
+| blast       | GET    | `/pulls/:id/blast`                     | PR blast radius (repo-intel; zero-LLM) |
 | repo-intel  | GET    | `/repos/:id/index-state`               |                                |
 |             | POST   | `/repos/:id/resync`                    |                                |
 | settings    | GET/PUT| `/settings`                            | workspace settings             |

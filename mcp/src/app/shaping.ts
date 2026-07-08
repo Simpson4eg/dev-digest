@@ -3,7 +3,14 @@
  * types. Keeps tool responses concise ("stisla structurovana vidpovid"): only
  * the fields the model needs, never a raw dump.
  */
-import type { AgentSummary, Convention, Finding, ReviewDto, Severity } from '../api/port.js';
+import type {
+  AgentSummary,
+  BlastRadiusDto,
+  Convention,
+  Finding,
+  ReviewDto,
+  Severity,
+} from '../api/port.js';
 
 export interface SeverityCounts {
   critical: number;
@@ -89,6 +96,40 @@ export function conventionsSummary(list: Convention[]) {
   }
   const top = list.slice(0, 10).map((c) => ({ rule: c.rule, category: c.category, status: c.status }));
   return { total: list.length, byStatus, byCategory, top };
+}
+
+/**
+ * Summary-first projection of a PR's blast radius. Renders each caller as a
+ * `file:line` string (concise, and the shape a reviewer jumps to) and rolls up
+ * the counts a model needs to reason about impact. Surfaces `degraded`/`reason`
+ * so the caller knows the index was absent/partial rather than the PR benign.
+ */
+export function blastRadiusView(dto: BlastRadiusDto) {
+  const endpoints = new Set<string>();
+  const crons = new Set<string>();
+  let callerCount = 0;
+  const downstream = dto.downstream.map((d) => {
+    callerCount += d.callers.length;
+    for (const e of d.endpoints_affected) endpoints.add(e);
+    for (const c of d.crons_affected) crons.add(c);
+    return {
+      symbol: d.symbol,
+      callers: d.callers.map((c) => `${c.file}:${c.line}`),
+      endpoints_affected: d.endpoints_affected,
+      crons_affected: d.crons_affected,
+    };
+  });
+  return {
+    ...(dto.degraded ? { degraded: true, reason: dto.reason } : {}),
+    counts: {
+      changed_symbols: dto.changed_symbols.length,
+      callers: callerCount,
+      endpoints: endpoints.size,
+      crons: crons.size,
+    },
+    changed_symbols: dto.changed_symbols,
+    downstream,
+  };
 }
 
 export interface Page<T> {

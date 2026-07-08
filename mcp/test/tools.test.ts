@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type {
   AgentSummary,
+  BlastRadiusDto,
   Convention,
   DevDigestApi,
   PrRef,
@@ -36,6 +37,7 @@ class MockApi implements DevDigestApi {
   runsByPr: Record<string, RunSummary[]> = {};
   reviews: Record<string, ReviewDto[]> = {};
   conventions: Record<string, Convention[]> = {};
+  blastByPr: Record<string, BlastRadiusDto> = {};
   trigger: TriggerReviewResult = { pr_id: '', runs: [] };
   runStatusSeq: string[] = ['done'];
   private getRunCalls = 0;
@@ -75,6 +77,11 @@ class MockApi implements DevDigestApi {
   }
   async listConventions(repoId: string): Promise<Convention[]> {
     return this.conventions[repoId] ?? [];
+  }
+  async getBlastRadius(prId: string): Promise<BlastRadiusDto> {
+    return (
+      this.blastByPr[prId] ?? { changed_symbols: [], downstream: [], summary: '' }
+    );
   }
 }
 
@@ -279,11 +286,57 @@ describe('get_conventions', () => {
 });
 
 describe('get_blast_radius', () => {
-  it('is a stub that returns an error', async () => {
+  it('resolves repo/pr and returns a summary-first impact view with file:line callers', async () => {
+    const api = new MockApi();
+    withRepoAndPr(api);
+    api.blastByPr = {
+      p1: {
+        changed_symbols: [{ name: 'rateLimit', file: 'src/mw.ts', kind: 'function' }],
+        downstream: [
+          {
+            symbol: 'rateLimit',
+            callers: [
+              { name: 'handler', file: 'src/api/public/index.ts', line: 23 },
+              { name: 'hook', file: 'src/api/public/webhooks.ts', line: 45 },
+            ],
+            endpoints_affected: ['GET /api/public/items'],
+            crons_affected: ['reset-rate-buckets'],
+          },
+        ],
+        summary: '',
+      },
+    };
+    const def = createGetBlastRadius({ api, config: CONFIG });
+
+    const res = await def.handler({ repo: 'acme/web', pr: 7 });
+    expect(res.isError).toBeFalsy();
+    const out = body(res);
+    expect(out.counts).toEqual({ changed_symbols: 1, callers: 2, endpoints: 1, crons: 1 });
+    const downstream = out.downstream as { symbol: string; callers: string[] }[];
+    expect(downstream[0]!.symbol).toBe('rateLimit');
+    expect(downstream[0]!.callers).toContain('src/api/public/index.ts:23');
+    expect(out).not.toHaveProperty('degraded');
+  });
+
+  it('passes the degraded flag + reason through when the index is absent', async () => {
+    const api = new MockApi();
+    withRepoAndPr(api);
+    api.blastByPr = {
+      p1: { changed_symbols: [], downstream: [], summary: '', degraded: true, reason: 'no_data' },
+    };
+    const def = createGetBlastRadius({ api, config: CONFIG });
+
+    const res = await def.handler({ repo: 'acme/web', pr: 7 });
+    expect(res.isError).toBeFalsy();
+    const out = body(res);
+    expect(out.degraded).toBe(true);
+    expect(out.reason).toBe('no_data');
+  });
+
+  it('errors forward to the repo list on an unknown repo', async () => {
     const api = new MockApi();
     const def = createGetBlastRadius({ api, config: CONFIG });
     const res = await def.handler({ repo: 'acme/web', pr: 7 });
     expect(res.isError).toBe(true);
-    expect((res.content[0] as { text: string }).text).toContain('Not yet implemented');
   });
 });

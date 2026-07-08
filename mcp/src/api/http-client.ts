@@ -5,6 +5,7 @@
  */
 import type {
   AgentSummary,
+  BlastRadiusDto,
   Convention,
   DevDigestApi,
   PrRef,
@@ -89,5 +90,9 @@ export class HttpDevDigestApi implements DevDigestApi {
 
   listConventions(repoId: string): Promise<Convention[]> {
     return this.request<Convention[]>('GET', `/repos/${repoId}/conventions`);
+  }
+
+  getBlastRadius(prId: string): Promise<BlastRadiusDto> {
+    return this.request<BlastRadiusDto>('GET', `/pulls/${prId}/blast`);
   }
 }
