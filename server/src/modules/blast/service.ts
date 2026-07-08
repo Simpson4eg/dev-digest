@@ -30,6 +30,12 @@ export class BlastService {
     // Facade degrades (never throws) when the index is absent — the shaped
     // result then carries `degraded: true` + a reason for the UI badge.
     const result = await this.container.repoIntel.getBlastRadius(pull.repoId, changedFiles);
-    return shapeBlastRadius(result);
+    const shaped = shapeBlastRadius(result);
+
+    // Anchor click-to-code links to the commit the caller data was indexed at,
+    // not the PR head (moved/renamed files would 404 there). Omitted when the
+    // repo isn't indexed — the client then falls back to the PR head sha.
+    const state = await this.container.repoIntel.getIndexState(pull.repoId);
+    return state.lastIndexedSha ? { ...shaped, ref: state.lastIndexedSha } : shaped;
   }
 }

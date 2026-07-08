@@ -117,6 +117,9 @@ export function BlastRadiusPanel({
   const endpointCount = new Set(blast?.downstream.flatMap((d) => d.endpoints_affected) ?? []).size;
   const cronCount = new Set(blast?.downstream.flatMap((d) => d.crons_affected) ?? []).size;
   const hasImpact = (blast?.downstream.length ?? 0) > 0;
+  // Caller file:line come from the indexed snapshot — anchor links to that
+  // commit (blast.ref), not the PR head, so moved/renamed files don't 404.
+  const linkSha = blast?.ref ?? headSha;
 
   return (
     <section>
@@ -147,7 +150,7 @@ export function BlastRadiusPanel({
               key={impact.symbol}
               impact={impact}
               repoFullName={repoFullName}
-              headSha={headSha}
+              headSha={linkSha}
               defaultOpen={i === 0}
             />
           ))}

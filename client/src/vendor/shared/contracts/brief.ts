@@ -58,6 +58,13 @@ export const BlastRadius = z.object({
   summary: z.string(),
   degraded: z.boolean().optional(),
   reason: BlastDegradedReason.optional(),
+  /**
+   * The commit the caller data was indexed at (`repo_index_state.last_indexed_sha`).
+   * Caller file:line come from THIS snapshot, so click-to-code must anchor links
+   * here — not the PR head, whose moved/renamed files would 404. Omitted when the
+   * repo isn't indexed yet (client falls back to the PR head sha).
+   */
+  ref: z.string().optional(),
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
 

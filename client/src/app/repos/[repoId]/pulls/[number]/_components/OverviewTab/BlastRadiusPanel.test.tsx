@@ -57,6 +57,17 @@ describe("BlastRadiusPanel", () => {
     );
   });
 
+  it("anchors caller links to blast.ref (indexed commit), not the PR head", () => {
+    useBlastRadius.mockReturnValue({ data: { ...BLAST, ref: "idx0000" }, isLoading: false });
+    render(<BlastRadiusPanel {...PROPS} />);
+
+    const link = screen.getByText("src/api/public/index.ts:23").closest("a");
+    expect(link).toHaveAttribute(
+      "href",
+      "https://github.com/acme/web/blob/idx0000/src/api/public/index.ts#L23",
+    );
+  });
+
   it("collapses the caller tree when the symbol row is clicked", () => {
     useBlastRadius.mockReturnValue({ data: BLAST, isLoading: false });
     render(<BlastRadiusPanel {...PROPS} />);

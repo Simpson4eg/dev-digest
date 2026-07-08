@@ -116,6 +116,8 @@ d('GET /pulls/:id/blast — blast radius from the persistent index', () => {
 
     expect(body.degraded).toBeFalsy();
     expect(body.summary).toBe('');
+    // Caller links anchor to the indexed commit, not the PR head.
+    expect(body.ref).toBe('sha1');
     expect(body.changed_symbols.map((s: { name: string }) => s.name)).toContain('rateLimit');
 
     const rate = body.downstream.find((dd: { symbol: string }) => dd.symbol === 'rateLimit');
