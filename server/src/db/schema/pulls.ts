@@ -26,6 +26,9 @@ export const pullRequests = pgTable(
     body: text('body'),
     openedAt: timestamp('opened_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
+    // When the PR was merged (NULL = still open). Powers Blast Radius `prior_prs`:
+    // earlier merged PRs that touched the same files as the PR under review.
+    mergedAt: timestamp('merged_at', { withTimezone: true }),
   },
   (t) => ({
     uq: uniqueIndex('pr_repo_number_uq').on(t.repoId, t.number), // idempotent import

@@ -105,6 +105,14 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     return service.listRuns(workspaceId, req.params.id);
   });
 
+  // ---- Single run by id (workspace-scoped) — for MCP / external polling ----
+  app.get('/runs/:id', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    const run = await service.getRun(workspaceId, req.params.id);
+    if (!run) throw new NotFoundError('Run not found');
+    return run;
+  });
+
   // ---- Delete one run from the history (+ its trace) ----------------------
   app.delete('/runs/:id', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(container, req);

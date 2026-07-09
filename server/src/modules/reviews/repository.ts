@@ -39,6 +39,16 @@ export class ReviewRepository {
     return pullRepo.getPrFiles(this.db, prId);
   }
 
+  /** Earlier merged PRs overlapping `changedFiles` (Blast Radius `prior_prs`). */
+  getPriorPrs(
+    repoId: string,
+    prId: string,
+    changedFiles: string[],
+    limit?: number,
+  ): Promise<pullRepo.PriorPrRow[]> {
+    return pullRepo.getPriorPrs(this.db, repoId, prId, changedFiles, limit);
+  }
+
   // ---- reviews + findings -------------------------------------------------
 
   insertReview(values: {
@@ -80,6 +90,12 @@ export class ReviewRepository {
   /** All runs for a PR (any status), newest first — the PR run history. */
   listRunsForPull(workspaceId: string, prId: string): Promise<RunSummary[]> {
     return runRepo.listRunsForPull(this.db, workspaceId, prId);
+  }
+
+  /** Fetch one run by id, workspace-scoped. Returns null when not found or
+   *  the run belongs to a different workspace. */
+  getRunById(workspaceId: string, runId: string): Promise<RunSummary | null> {
+    return runRepo.getRunById(this.db, workspaceId, runId);
   }
 
   /** Delete one agent run (+ its trace via FK cascade). Workspace-scoped. */

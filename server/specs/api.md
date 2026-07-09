@@ -18,10 +18,12 @@ contracts in `src/vendor/shared/contracts/`, wired through
 |             | GET    | `/reviews`                             | recent reviews                 |
 |             | POST   | `/findings/:id/accept`                 |                                |
 |             | POST   | `/findings/:id/dismiss`                |                                |
+|             | GET    | `/runs/:id`                            | single run status (workspace-scoped; 404 if unknown) |
 |             | GET    | `/runs/:id/events`                     | SSE — live run trace           |
 |             | GET    | `/runs/:id/trace`                      | persisted run trace            |
 | agents      | GET    | `/agents`                              |                                |
 |             | GET    | `/agents/:id`                          |                                |
+| blast       | GET    | `/pulls/:id/blast`                     | PR blast radius (repo-intel; zero-LLM) |
 | repo-intel  | GET    | `/repos/:id/index-state`               |                                |
 |             | POST   | `/repos/:id/resync`                    |                                |
 | settings    | GET/PUT| `/settings`                            | workspace settings             |

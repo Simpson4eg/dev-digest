@@ -8,6 +8,7 @@ import { api, API_BASE } from "../api";
 import { qk } from "../query-keys";
 import { notify } from "../providers/toast";
 import type {
+  BlastRadius,
   FindingActionKind,
   PrIntentRecord,
   PrReviewComment,
@@ -78,6 +79,18 @@ export function useSmartDiff(prId: string | null | undefined) {
   return useQuery({
     queryKey: qk.smartDiff(prId),
     queryFn: () => api.get<SmartDiff>(`/pulls/${prId}/smart-diff`),
+    enabled: !!prId,
+  });
+}
+
+// ---- Blast Radius: changed symbols → downstream callers → endpoints/crons ----
+/** The PR's blast radius, read server-side from the repo-intel index — changed
+   symbols, who calls them (file:line), and the HTTP endpoints / crons those
+   callers reach. No LLM call. `degraded` is set when the repo isn't indexed yet. */
+export function useBlastRadius(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.prBlastRadius(prId),
+    queryFn: () => api.get<BlastRadius>(`/pulls/${prId}/blast`),
     enabled: !!prId,
   });
 }
