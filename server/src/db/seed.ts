@@ -180,6 +180,39 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     ]);
   }
 
+  // ---- a prior MERGED PR overlapping #482's files (Blast Radius `prior_prs`) ----
+  // Gives the "who last touched this code" panel real data offline: #468 merged
+  // earlier and also touched src/config.ts + src/api/users.ts.
+  const [prior] = await db
+    .select()
+    .from(t.pullRequests)
+    .where(and(eq(t.pullRequests.repoId, repoId), eq(t.pullRequests.number, 468)));
+  if (!prior) {
+    const [merged] = await db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId,
+        number: 468,
+        title: 'Load Stripe + limiter settings from env',
+        author: 'darius.n',
+        branch: 'chore/config-from-env',
+        base: 'main',
+        headSha: 'f0e1d2c3b4a5',
+        additions: 63,
+        deletions: 19,
+        filesCount: 3,
+        status: 'merged',
+        mergedAt: new Date('2026-05-21T09:14:00Z'),
+        body: 'Move config out of source; groundwork the rate-limit PR builds on.',
+      })
+      .returning();
+    await db.insert(t.prFiles).values([
+      { prId: merged!.id, path: 'src/config.ts', additions: 41, deletions: 8 },
+      { prId: merged!.id, path: 'src/api/users.ts', additions: 22, deletions: 11 },
+    ]);
+  }
+
   // ---- built-in agents (the three core presets) ----
   // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).
   const seedAgents: Array<typeof t.agents.$inferInsert> = [

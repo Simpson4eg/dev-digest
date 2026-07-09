@@ -32,6 +32,20 @@ export class BlastService {
     const result = await this.container.repoIntel.getBlastRadius(pull.repoId, changedFiles);
     const shaped = shapeBlastRadius(result);
 
+    // "Who last touched this code": earlier merged PRs overlapping the changed
+    // files. Zero-LLM DB read, independent of the repo-intel index — so it works
+    // even on the degraded path. Omitted from the wire when none overlap.
+    const priorPrs = await this.repo.getPriorPrs(pull.repoId, prId, changedFiles);
+    if (priorPrs.length > 0) {
+      shaped.prior_prs = priorPrs.map((p) => ({
+        pr_number: p.number,
+        title: p.title,
+        author: p.author,
+        merged_at: p.mergedAt.toISOString(),
+        files_overlap: p.filesOverlap,
+      }));
+    }
+
     // Anchor click-to-code links to the commit the caller data was indexed at,
     // not the PR head (moved/renamed files would 404 there). Omitted when the
     // repo isn't indexed — the client then falls back to the PR head sha.

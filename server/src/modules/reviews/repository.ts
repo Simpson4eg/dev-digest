@@ -39,6 +39,16 @@ export class ReviewRepository {
     return pullRepo.getPrFiles(this.db, prId);
   }
 
+  /** Earlier merged PRs overlapping `changedFiles` (Blast Radius `prior_prs`). */
+  getPriorPrs(
+    repoId: string,
+    prId: string,
+    changedFiles: string[],
+    limit?: number,
+  ): Promise<pullRepo.PriorPrRow[]> {
+    return pullRepo.getPriorPrs(this.db, repoId, prId, changedFiles, limit);
+  }
+
   // ---- reviews + findings -------------------------------------------------
 
   insertReview(values: {

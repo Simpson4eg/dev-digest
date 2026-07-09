@@ -81,6 +81,15 @@ describe('AI contracts parse fixtures', () => {
           },
         ],
         summary: 's',
+        prior_prs: [
+          {
+            pr_number: 468,
+            title: 'earlier merge',
+            author: 'a',
+            merged_at: '2026-05-21T09:14:00.000Z',
+            files_overlap: ['a.ts'],
+          },
+        ],
       }),
     ).not.toThrow();
     expect(() =>

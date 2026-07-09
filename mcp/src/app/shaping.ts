@@ -119,6 +119,7 @@ export function blastRadiusView(dto: BlastRadiusDto) {
       crons_affected: d.crons_affected,
     };
   });
+  const priorPrs = dto.prior_prs ?? [];
   return {
     ...(dto.degraded ? { degraded: true, reason: dto.reason } : {}),
     counts: {
@@ -126,9 +127,22 @@ export function blastRadiusView(dto: BlastRadiusDto) {
       callers: callerCount,
       endpoints: endpoints.size,
       crons: crons.size,
+      prior_prs: priorPrs.length,
     },
     changed_symbols: dto.changed_symbols,
     downstream,
+    // "Who last touched this code" — earlier merged PRs over the same files.
+    ...(priorPrs.length > 0
+      ? {
+          prior_prs: priorPrs.map((p) => ({
+            pr: p.pr_number,
+            title: p.title,
+            author: p.author,
+            merged_at: p.merged_at,
+            files_overlap: p.files_overlap,
+          })),
+        }
+      : {}),
   };
 }
 

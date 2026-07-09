@@ -52,12 +52,33 @@ export const BlastDegradedReason = z.enum([
 ]);
 export type BlastDegradedReason = z.infer<typeof BlastDegradedReason>;
 
+/**
+ * An earlier MERGED PR that touched at least one of the files this PR changes —
+ * "who last touched this code". Derived zero-LLM from `pull_requests` +
+ * `pr_files` (merged_at IS NOT NULL, overlapping paths), newest merge first.
+ */
+export const PriorPr = z.object({
+  pr_number: z.number().int(),
+  title: z.string(),
+  author: z.string(),
+  /** ISO-8601 merge timestamp. */
+  merged_at: z.string(),
+  /** Which of the current PR's files this prior PR also touched. */
+  files_overlap: z.array(z.string()),
+});
+export type PriorPr = z.infer<typeof PriorPr>;
+
 export const BlastRadius = z.object({
   changed_symbols: z.array(ChangedSymbol),
   downstream: z.array(DownstreamImpact),
   summary: z.string(),
   degraded: z.boolean().optional(),
   reason: BlastDegradedReason.optional(),
+  /**
+   * Earlier merged PRs overlapping the changed files (recency-ordered). Omitted
+   * when none overlap or the PR has no changed files — never LLM-derived.
+   */
+  prior_prs: z.array(PriorPr).optional(),
   /**
    * The commit the caller data was indexed at (`repo_index_state.last_indexed_sha`).
    * Caller file:line come from THIS snapshot, so click-to-code must anchor links

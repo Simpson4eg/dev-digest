@@ -96,6 +96,43 @@ d('GET /pulls/:id/blast — blast radius from the persistent index', () => {
     prId = pr!.id;
     await db.insert(t.prFiles).values({ prId, path: 'src/mw.ts', additions: 10, deletions: 0 });
 
+    // An EARLIER merged PR that also touched src/mw.ts → expected in `prior_prs`.
+    const [priorPr] = await db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId,
+        number: 0,
+        title: 'earlier mw change',
+        author: 'ada',
+        branch: 'chore/mw',
+        base: 'main',
+        headSha: 'sha0',
+        status: 'merged',
+        mergedAt: new Date('2026-01-02T00:00:00Z'),
+      })
+      .returning();
+    await db
+      .insert(t.prFiles)
+      .values({ prId: priorPr!.id, path: 'src/mw.ts', additions: 3, deletions: 1 });
+    // An OPEN PR over the same file must NOT appear (merged_at IS NULL).
+    const [openPr] = await db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId,
+        number: 2,
+        title: 'open mw change',
+        author: 'grace',
+        branch: 'feat/mw2',
+        base: 'main',
+        headSha: 'sha2',
+      })
+      .returning();
+    await db
+      .insert(t.prFiles)
+      .values({ prId: openPr!.id, path: 'src/mw.ts', additions: 1, deletions: 0 });
+
     const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
     app = await buildApp({
       config,
@@ -128,6 +165,14 @@ d('GET /pulls/:id/blast — blast radius from the persistent index', () => {
       ),
     ).toBe(true);
     expect(rate.endpoints_affected).toContain('GET /api/public/items');
+
+    // prior_prs: only the earlier MERGED overlapping PR, with its file overlap.
+    expect(body.prior_prs).toHaveLength(1);
+    expect(body.prior_prs[0]).toMatchObject({
+      pr_number: 0,
+      author: 'ada',
+      files_overlap: ['src/mw.ts'],
+    });
   });
 
   it('404s for an unknown PR id', async () => {

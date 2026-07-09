@@ -120,6 +120,15 @@ export interface ChangedSymbolDto {
   kind: string;
 }
 
+/** An earlier merged PR that touched at least one of the changed files. */
+export interface PriorPrDto {
+  pr_number: number;
+  title: string;
+  author: string;
+  merged_at: string;
+  files_overlap: string[];
+}
+
 /** PR blast radius, from `GET /pulls/:id/blast`. Zero-LLM read of repo-intel. */
 export interface BlastRadiusDto {
   changed_symbols: ChangedSymbolDto[];
@@ -128,6 +137,8 @@ export interface BlastRadiusDto {
   /** True when the repo-intel index is absent/partial — panel shows a badge. */
   degraded?: boolean;
   reason?: string;
+  /** Earlier merged PRs overlapping the changed files (recency-ordered). */
+  prior_prs?: PriorPrDto[];
 }
 
 /**

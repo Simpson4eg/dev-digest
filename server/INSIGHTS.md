@@ -76,6 +76,9 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 - 2026-07-05 · `path.isAbsolute('/etc/passwd')` returns `false` on Windows — root-relative paths bypass the POSIX-only guard · evidence: `server/src/modules/reviews/run-executor.ts` candidate-path filter + `server/src/adapters/git/simple-git.ts:129-137`
   On Windows, Node's `path.isAbsolute` treats leading-`/` paths as root-relative (relative to the current drive), not absolute — so `isAbsolute('/etc/passwd.md')` is `false`. For security filters on author-controlled paths, always add `/^[/\\]/` (rooted path) and `/^[a-zA-Z]:/` (Windows drive-letter) checks alongside `isAbsolute`. The PRIMARY defence is the adapter-level containment check in `SimpleGitClient.readFile` (resolve + startsWith base+sep), which catches everything regardless of platform. The secondary filter in `deriveIntent` is defence-in-depth but cannot be the only line of defence on Windows.
 
+- 2026-07-09 · Blast Radius `prior_prs` is composed in the SERVICE, not `shapeBlastRadius` — and works on the degraded path · evidence: `server/src/modules/blast/service.ts:34-46`, `server/src/modules/reviews/repository/pull.repo.ts:getPriorPrs`
+  `shape.ts` stays pure over `BlastResult` (the repo-intel facade output). Prior-PR data is a separate DB read (`pull_requests` × `pr_files`, `merged_at IS NOT NULL`, overlapping paths), so it lives in the service — mirroring how `ref` is enriched there. Consequence: `prior_prs` is populated even when the repo-intel index is absent (degraded blast), because it never touches the index. `merged_at` was added to `pull_requests` for this (migration `0011`); it is NULL for open PRs, which the query relies on to exclude them.
+
 ## Session Notes
 
 ## Open Questions

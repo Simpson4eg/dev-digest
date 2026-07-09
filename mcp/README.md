@@ -12,7 +12,7 @@ API (`@devdigest/api`), so the API must be running.
 | `run_agent_on_pr` | Run one agent on a PR and return the findings. Waits for the run; if it is still going at timeout, returns `{status:"running", run_id}`. **Only tool that writes.** |
 | `get_findings` | Concise verdict + score + severity breakdown for a PR already reviewed (`detail:true` for the full list). |
 | `get_conventions` | The repo's extracted coding conventions, grouped by status and category. |
-| `get_blast_radius` | *Stub* — returns an error; will map a PR's impacted files later. |
+| `get_blast_radius` | A PR's zero-LLM impact map: changed symbols → downstream callers (file:line) → impacted endpoints/crons, plus prior merged PRs over the same files. |
 
 All tools take flat arguments: `repo` as `"owner/name"`, `pr` as a number,
 `agent` as an id from `list_agents`.

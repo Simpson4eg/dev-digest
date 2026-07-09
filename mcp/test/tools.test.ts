@@ -304,6 +304,15 @@ describe('get_blast_radius', () => {
           },
         ],
         summary: '',
+        prior_prs: [
+          {
+            pr_number: 468,
+            title: 'Load settings from env',
+            author: 'darius.n',
+            merged_at: '2026-05-21T09:14:00.000Z',
+            files_overlap: ['src/config.ts'],
+          },
+        ],
       },
     };
     const def = createGetBlastRadius({ api, config: CONFIG });
@@ -311,10 +320,13 @@ describe('get_blast_radius', () => {
     const res = await def.handler({ repo: 'acme/web', pr: 7 });
     expect(res.isError).toBeFalsy();
     const out = body(res);
-    expect(out.counts).toEqual({ changed_symbols: 1, callers: 2, endpoints: 1, crons: 1 });
+    expect(out.counts).toEqual({ changed_symbols: 1, callers: 2, endpoints: 1, crons: 1, prior_prs: 1 });
     const downstream = out.downstream as { symbol: string; callers: string[] }[];
     expect(downstream[0]!.symbol).toBe('rateLimit');
     expect(downstream[0]!.callers).toContain('src/api/public/index.ts:23');
+    const priorPrs = out.prior_prs as { pr: number; author: string }[];
+    expect(priorPrs).toHaveLength(1);
+    expect(priorPrs[0]).toMatchObject({ pr: 468, author: 'darius.n' });
     expect(out).not.toHaveProperty('degraded');
   });
 
