@@ -6,7 +6,7 @@ description: Read-only architecture reviewer. Checks structural integrity — la
   file:line evidence. Never edits. Not a style linter. Use to review a module's
   or a change's architecture.
 tools: Read, Grep, Glob
-model: opus
+model: sonnet
 color: green
 ---
 

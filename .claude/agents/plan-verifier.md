@@ -6,7 +6,7 @@ description: Read-only requirements-coverage verifier. Given a plan / requiremen
   on completeness and traceability, NOT code quality or best practices. Use to
   check "did we actually do everything the plan asked?".
 tools: Read, Grep, Glob
-model: opus
+model: sonnet
 color: green
 ---
 

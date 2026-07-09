@@ -83,6 +83,17 @@ and the reviewer re-passes.
   keep planning in one chat so the stable `AGENTS.md`/`INSIGHTS.md` reads stay in the prompt
   cache. The planner does **not** run tests (it is read-only) — it only writes the success-check
   command into each task; the implementer runs it.
-- **Model split:** authoring/reasoning agents are opus (spec-creator, planner,
-  architecture-reviewer); workers are sonnet (implementer, test-writer). Re-check whether
-  `plan-verifier` (mostly grep + traceability) needs opus or runs fine on sonnet.
+- **Model split:** authoring/planning agents are opus (spec-creator, implementation-planner);
+  everything downstream is sonnet — implementer, test-writer, **architecture-reviewer, and
+  plan-verifier** (both moved off opus for cost; the trade-off is slightly shallower structural
+  reasoning, revisit if quality drops). No opus agent runs in the automated `/implement`
+  pipeline.
+
+## Automated subset — the `/implement` command
+
+`.claude/commands/implement.md` runs the **downstream** half of this pipeline automatically
+from an already-approved plan: implement ×N → architecture-reviewer (+fix loop) → `/code-review`
+bug pass (+fix loop) → plan-verifier → `/pr-self-review` gate, with all fix-loops **bounded**
+and re-reviewing only changed hunks. It deliberately **skips test-writer** (token savings) and
+**never runs spec-creator or implementation-planner** — those stay manual and upstream. Steps
+1–3 above (spec, plan, user approval) are the human-run prerequisites for the command.

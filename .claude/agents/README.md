@@ -17,8 +17,8 @@ and explicit honesty rules.
 | **implementation-planner** | Turns an approved requirement/spec into a structured **Implementation Plan** persisted to `plans/PLAN-NN.md` (tasks, ownership, dependency order, per-task skills, success checks); verifies requirement/AC coverage, asks multi- vs single-agent | `Read, Grep, Glob, Write, Edit` | opus | writes `plans/` only | before implementation |
 | **implementer** | Executes **one** plan task — writes backend or UI code with the domain-correct skills, makes existing tests pass | `Read, Grep, Glob, Edit, Write, Bash` | sonnet | ❌ | N in parallel, one per task |
 | **test-writer** | Writes tests for UI + backend using the domain testing skills; test files only, never source | `Read, Grep, Glob, Edit, Write, Bash` | sonnet | ❌ | after implementation |
-| **architecture-reviewer** | Structured, evidence-cited architecture review (layers, dependency direction, port/adapter) — not a style linter | `Read, Grep, Glob` | opus | ✅ | review gate |
-| **plan-verifier** | Verifies implemented code against a given plan — requirements coverage & traceability, not code quality | `Read, Grep, Glob` | opus | ✅ | verification gate |
+| **architecture-reviewer** | Structured, evidence-cited architecture review (layers, dependency direction, port/adapter) — not a style linter | `Read, Grep, Glob` | sonnet | ✅ | review gate |
+| **plan-verifier** | Verifies implemented code against a given plan — requirements coverage & traceability, not code quality | `Read, Grep, Glob` | sonnet | ✅ | verification gate |
 | **doc-writer** | Documents existing code / turns plans into structured docs with Mermaid diagrams; docs only | `Read, Grep, Glob, Edit, Write` | sonnet | ❌ | after implementation |
 | **spec-creator** | Authors SDD feature specs — interviews to remove ambiguity, analyzes the design for gaps, writes EARS-testable criteria (`SPEC-NN`); writes under `specs/` only | `Read, Grep, Glob, Write, Edit` | opus | ❌ | before planning |
 
