@@ -33,6 +33,32 @@ hand-off, every fix-loop, and any pre-flight recon is driven from the main chat.
 8. /pr-self-review   → BLOCKING gate before git push / gh pr create
 ```
 
+## Right-sizing — run the lightest lane that works
+
+The full pipeline is for **net-new features and cross-module changes**. Do **not** pay its cost
+on small work — that is the "10× slowdown" antipattern. Match the lane to the change:
+
+- **Trivial** (≈≤ 50 lines, one file, no new contract): skip spec **and** plan. Edit directly,
+  then `/code-review` + `/pr-self-review`. (`spec-creator` and `implementation-planner` already
+  self-eject here — "too trivial → hand back".)
+- **Medium** (one module, clear requirements, no cross-module contract): skip the spec; write a
+  short plan (or task list) and run `/implement`.
+- **Full** (net-new feature, cross-module, or a contract change): the whole pipeline below.
+
+**Not yet a feature?** If requirements are unformed or the work is exploratory ("will this even
+work?"), do **not** force SDD — spike with the `researcher` agent or a throwaway branch first,
+then write the spec once the shape is known.
+
+## High-stakes specs — cross-model review (opt-in)
+
+A spec authored and reviewed by the **same model family** shares that model's blind spots. For a
+**high-stakes** spec (irreversible data migration, auth/security surface, an external contract,
+anything expensive to get wrong), run one **cross-model** pass before approval — e.g.
+`/code-review` on the spec file, or a second read-only critic on a *different* model than the
+author. This is **opt-in, not default**: skipping it on routine specs is fine; skipping it on
+high-stakes ones is the antipattern. It is a spec-phase step, separate from the sonnet code
+reviewers in `/implement`.
+
 ## Hand-off artifacts (files, not chat scrollback)
 
 Each stage persists its output to a **file** so the next stage (often a fresh chat) reads it
@@ -68,12 +94,19 @@ lane) to fix, then re-run the reviewer. A `NOT MET` from plan-verifier, a CRITIC
 gate, or a source bug surfaced by test-writer is not "done" until an implementer has fixed it
 and the reviewer re-passes.
 
-## Status transitions
+## Status transitions & anti-drift
 
 - **Spec:** spec-creator sets `draft`; **user** approves `draft → approved`; plan-verifier's
   MET verdict backs `approved → implemented` (the orchestrator flips it).
 - **Plan:** planner sets `draft`; user approves; orchestrator marks `in-progress` at step 3 and
   `done` after step 7 passes.
+- **No flip while the document and the code disagree.** If implementation deliberately diverged
+  from the spec/plan (a better shape emerged, a task was dropped or added), that document is now
+  **stale** — do **not** flip it to `implemented`/`done`. Since `spec-creator` and
+  `implementation-planner` are the *only* writers of those files and run **manually, upstream**,
+  the orchestrator must **hand the divergence back** to update the document (or, for a tiny
+  deviation, record it as an explicit deviation note) *before* the status flip. Reconcile the
+  doc — never let it rot silently. This is the forcing function against spec/plan rot.
 
 ## Cost notes
 

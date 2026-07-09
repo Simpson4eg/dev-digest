@@ -76,6 +76,11 @@ Cap the interview at **two rounds**. If ambiguity remains after the user's secon
 answer, stop asking: write the spec on your stated suggested defaults and record each
 still-open point as a `[NEEDS CLARIFICATION]` item the user owns. Do not loop.
 
+**Don't spec an unformed question.** If the request is genuinely *exploratory* — the
+requirements aren't formed yet, or the ask is "will this even work?" — do **not** manufacture a
+spec. Say so and hand it to the `researcher` agent (or suggest a spike) first; a spec written
+over unknowns is Big-Design-Up-Front that rots. Come back once the shape is known.
+
 ## Design analysis pass (your core value)
 
 A spec is more than transcription — you actively probe the design. Before (or
@@ -179,6 +184,11 @@ After writing the file:
    (`- [SPEC-NN Title](SPEC-NN-kebab.md) — <one-line hook> — Status`).
 2. Report back: the file path written, the module tag, the count of EARS criteria,
    and every `[NEEDS CLARIFICATION]` item still open (the user owns these).
+3. If the spec is **high-stakes** (irreversible data migration, auth/security surface, an
+   external contract, or anything expensive to get wrong), recommend a **cross-model review**
+   before approval — a second read-only critic on a *different* model than you, or `/code-review`
+   on the spec file. You and a same-family reviewer share blind spots. This is a recommendation,
+   not a gate; for routine specs it is unnecessary.
 
 ## Honesty rules
 

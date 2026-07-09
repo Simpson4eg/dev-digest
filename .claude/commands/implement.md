@@ -38,6 +38,11 @@ task list from the plan. Echo a one-line plan-of-record: plan file, spec, task c
 "test-writer skipped; reviewers on Sonnet". Then proceed without further prompting unless the
 plan is ambiguous or its `Requirements coverage` table already shows a gap.
 
+**Right-size first.** This command is the *full* lane. If the change is actually trivial (a
+single-task plan, ≈≤ 50 lines, no new contract), say so and collapse steps 2–3 into one review
+pass rather than running every loop — see the "Right-sizing" lane in `.claude/agents/WORKFLOW.md`.
+Don't pay the full pipeline's cost on small work.
+
 ### 1. Implement (fan-out)
 - **Multi-agent:** launch `implementer` subagents **in parallel, one per plan task**, honoring
   the plan's dependency edges — independent tasks in the same wave, tasks sharing a contract
@@ -70,6 +75,13 @@ therefore covered only by pre-existing tests. Flag this as a known gap in the fi
   on changed hunks. Bounded to 2 iterations.
 - When every item is **MET**, note that `specs/SPEC-NN.md` → `implemented` and
   `plans/PLAN-NN.md` → `done` may be flipped; make those edits only if the user confirms.
+- **Anti-drift gate (before any status flip).** If the implementation deliberately diverged from
+  the spec/plan — a better shape emerged, a task was dropped or added, a contract changed — the
+  document is now stale. Do **not** flip its status. **Hand the divergence back** to
+  `spec-creator` / `implementation-planner` (they are the only writers, and are manual/upstream)
+  to reconcile the document first — or, for a tiny deviation, record it as an explicit deviation
+  note. Never let the spec/plan rot silently to make the flip pass. `plan-verifier` reports MET
+  against what the code does; *you* must catch "code does something the doc no longer describes".
 
 ### 6. Final gate
 - Run **`/pr-self-review`**. If it **BLOCKS** (any CRITICAL / secret_leak / lethal_trifecta),
