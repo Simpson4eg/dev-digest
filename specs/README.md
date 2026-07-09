@@ -1,0 +1,24 @@
+# specs/ — Spec-Driven Development specs
+
+Feature specifications for DevDigest, authored by the **`spec-creator`** agent.
+Each spec is one file, `SPEC-NN-<kebab-feature>.md`, with a global `SPEC-NN`
+number. A spec captures *what* a feature must do and *why* — as EARS-testable
+acceptance criteria — **before** it is planned (`implementation-planner`) or implemented
+(`implementer`).
+
+These are **feature specs** and are distinct from the per-module *reference* specs
+(`server/specs/`, `client/specs/`, `reviewer-core/specs/`), which document contracts
+and schemas that already exist.
+
+## Conventions
+
+- **Number:** global sequence, zero-padded — `SPEC-01`, `SPEC-02`, …
+- **Status:** `draft` → `approved` → `implemented` (or `superseded`).
+- **module tag:** frontmatter `module:` = primary module or `cross-cutting`.
+- **Template:** start from [`TEMPLATE.md`](TEMPLATE.md).
+- **Supersedes:** a spec that replaces another links it in `Supersedes:` and flips
+  the old one's `Status:` to `superseded`.
+
+## Index
+
+<!-- spec-creator appends one line per spec below: - [SPEC-NN Title](file.md) — hook — Status -->
