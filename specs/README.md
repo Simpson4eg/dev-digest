@@ -13,7 +13,10 @@ and schemas that already exist.
 ## Conventions
 
 - **Number:** global sequence, zero-padded — `SPEC-01`, `SPEC-02`, …
-- **Status:** `draft` → `approved` → `implemented` (or `superseded`).
+- **Status:** `draft` → `approved` → `implemented` (or `superseded`). Ownership of each
+  transition: **`spec-creator`** sets `draft` (and flips a superseded spec to `superseded`);
+  **the user** approves `draft → approved`; **`plan-verifier`** flips `approved → implemented`
+  once every `AC-N` is verified MET against the code. No agent silently self-approves.
 - **module tag:** frontmatter `module:` = primary module or `cross-cutting`.
 - **Template:** start from [`TEMPLATE.md`](TEMPLATE.md).
 - **Supersedes:** a spec that replaces another links it in `Supersedes:` and flips

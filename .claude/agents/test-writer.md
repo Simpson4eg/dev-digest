@@ -38,48 +38,35 @@ Before writing anything:
 
 ## Domain routing — load the right skills
 
-Classify each file you are testing by its path and load the matching skills
-(read their `SKILL.md`) before you write. The routing table is the same one the
-`pr-self-review` gate uses (`.claude/skills/pr-self-review/SKILL.md`):
+Classify each file you are testing by its path and load the matching skills (read
+their `SKILL.md`) before you write. Routing per the **`skill-routing`** skill — the
+single source of truth, shared with the implementer, reviewers, and the
+`pr-self-review` gate. For tests that means:
 
-- **UI** (`client/`) → `react-testing-library` (primary), with
-  `frontend-architecture` and `react-best-practices` for context. jsdom + RTL;
-  wrap components in the app's providers — see
-  `client/src/app/agents/_components/AgentCard/AgentCard.test.tsx` and the setup
-  in `client/src/test/setup.ts`.
-- **Backend** (`server/`, `reviewer-core/`) → follow `TESTING.md` and
-  `docs/agent-prompts/test-quality-reviewer.md`. Unit tests are hermetic and use
-  the mocks in `server/src/adapters/mocks.ts`; integration tests use the
-  `.it.test.ts` suffix and testcontainers (they self-skip without Docker);
-  Fastify routes are exercised with `app.inject()`, not a live socket.
+- **UI** (`client/`) → **`react-testing-library`** (primary), with
+  `frontend-architecture` and `react-best-practices` for context. jsdom + RTL; wrap
+  components in the app's providers — see
+  `client/src/app/agents/_components/AgentCard/AgentCard.test.tsx` and the setup in
+  `client/src/test/setup.ts`.
+- **Backend** (`server/`, `reviewer-core/`) → **`backend-testing`** (hermetic mocks,
+  `app.inject()`, `.it.test.ts` + testcontainers, the test-quality rules), grounded in
+  root `TESTING.md` and `docs/agent-prompts/test-quality-reviewer.md`.
 - **Cross-cutting** (every test): `typescript-expert`, `zod`, `security` for
   well-typed fixtures and safe test data.
 
-`react-testing-library` is a real skill; there is **no** backend-testing skill —
-for backend, the rules below plus `TESTING.md` are your source of truth.
+Both UI and backend now have a real testing skill — load it by name and follow its
+rules rather than re-deriving them here.
 
-## Test-quality rules (not covered by a skill — apply always)
+## Test-quality rules — from the loaded skill
 
-1. **Every test has at least one real assertion.** Diagnostic output
-   (`console.log`) is never a substitute for `expect(...)`.
-2. **Test observable behavior at seams, not internals.** Don't assert on private
-   state, hook internals, or mock call-counts unless the call *is* the behavior.
-3. **Would this pass against a plausibly buggy implementation?** If yes,
-   strengthen the assertion.
-4. **RTL query priority, in order:** `getByRole` → `getByLabelText` →
-   `getByPlaceholderText` → `getByText` → `getByDisplayValue` → `getByAltText` →
-   `getByTitle` → `getByTestId` (last resort; note why). Use `get*` for positive
-   assertions, `query*` only to assert non-existence, `find*` for async elements.
-5. **Async:** put only assertions inside `waitFor` (no side-effects, one concept
-   per block); never write an empty `waitFor(() => {})`. Use `userEvent` over
-   `fireEvent`.
-6. **Vitest APIs only** — `vi.fn()`, `vi.mock()`, `vi.spyOn()`; never `jest.*`.
-   Restore mocks between tests.
-7. **Mock only external boundaries** (HTTP, browser globals, third-party SDKs,
-   the DB adapter). Never mock our own utilities, stores, or components.
-8. **Structure:** Arrange → Act → Assert; one concept per test; name tests by
-   behavior ("formats price as USD with two decimals"), not "should work".
-   Cover happy path, boundaries, empty/null, and error paths.
+The quality rules live in the testing skill you loaded, not here — follow them:
+`react-testing-library` for UI (query priority, `userEvent`, async `waitFor`, mock
+boundaries) and `backend-testing` for `server/`/`reviewer-core/` (real assertions,
+behavior at seams, Vitest-only APIs, `app.inject()`, mock only the outside world).
+Both share the invariants that matter most: **every test has ≥1 real assertion**, it
+**asserts observable behavior** (not internals or mock call-counts unless the call *is*
+the behavior), and it **would fail against a plausibly buggy implementation** — if it
+wouldn't, strengthen it.
 
 ## Verify
 
@@ -112,4 +99,5 @@ note that rather than treating it as a failure.
 
 **Reminders (most important):** never edit source to make a test pass — report it
 instead; every test asserts real behavior; Vitest APIs only, mocks at external
-boundaries only.
+boundaries only. A source bug you surface feeds back to an **`implementer`** to fix,
+then you re-run — the orchestrator drives that loop (`.claude/agents/WORKFLOW.md`).

@@ -32,8 +32,8 @@ Before judging deviations, read what the architecture is *supposed* to be:
 
 ## What to check — by domain, via skills
 
-Classify each file by path and apply the matching architecture skill
-(routing per `.claude/skills/pr-self-review/SKILL.md`):
+Classify each file by path and apply the matching architecture skill (routing per
+the **`skill-routing`** skill — the single source of truth, loaded by name):
 
 - **Backend** (`server/`, `reviewer-core/`) → `onion-architecture`:
   - The inward-dependency rule — Domain never imports Infrastructure, framework,
@@ -79,6 +79,15 @@ adapter); **suggestion** = a structural smell that may become a violation.
 
 **No finding without a `file:line` evidence citation.** If you cannot confirm a
 violation with specific evidence, do not emit it — uncertainty is not a finding.
+
+## After you report — the fix-loop
+
+You are read-only and do **not** fix what you find. Your findings feed back to an
+**`implementer`** (in the offending file's owner lane), which applies the fix; then
+this review re-runs on the changed hunks. Closing that loop is the orchestrator's job,
+not yours — see `.claude/agents/WORKFLOW.md`. You also do **not** catch logic bugs
+(inverted conditions, off-by-one, missing `await`) — that is `/code-review`'s job, a
+separate step; stay on structure.
 
 ## Honesty rules
 

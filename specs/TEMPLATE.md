@@ -16,7 +16,9 @@ Supersedes: —
 <!-- As a <role>, I want <capability>, so that <outcome>. -->
 
 ## Acceptance criteria (EARS)
-<!-- Each is one testable statement with an ID. Use the EARS patterns below. -->
+<!-- Each is one testable statement with an ID, traceable one-to-one to the test that
+     will prove it. Use the EARS patterns — see the `spec-authoring` skill for the five
+     patterns, the vague→testable translation, and the edge-case / non-functional checklists. -->
 - **AC-1** — <criterion>
 - **AC-2** — <criterion>
 
@@ -40,20 +42,10 @@ Supersedes: —
 
 ---
 
-## EARS quick-reference (delete before saving, or keep in TEMPLATE.md only)
+## EARS quick-reference
 
-Every acceptance criterion is a single testable statement. Five patterns:
-
-1. **Ubiquitous** (always): "The system **shall** …"
-2. **Event-driven** — `WHEN <trigger>, the system **shall** <response>`
-3. **State-driven** — `WHILE <state>, the system **shall** <response>`
-4. **Unwanted behavior** — `IF <condition>, THEN the system **shall** <response>`
-5. **Optional feature** — `WHERE <feature is present>, the system **shall** <response>`
-
-Translate vague → testable:
-
-| Vague | EARS |
-| --- | --- |
-| "Works fine on big repos" | **WHEN** a repo exceeds the indexing threshold, the system **shall** generate the overview from deterministic facts only |
-| "Shouldn't crash if the model is down" | **IF** the structured model call fails, **THEN** the system **shall** render a deterministic skeleton with the reason |
-| "Hint where to start reading" | The system **shall** order the reading path by import-graph file rank, not alphabetically |
+The five EARS patterns, the vague→testable translation, INVEST user stories, and the
+edge-case / non-functional checklists live in the **`spec-authoring`** skill — the single
+source of truth. Load it while filling in **Acceptance criteria** above; it is not
+duplicated here. Reminder of the five patterns: Ubiquitous · Event-driven (`WHEN … shall`) ·
+State-driven (`WHILE … shall`) · Unwanted (`IF … THEN … shall`) · Optional (`WHERE … shall`).
