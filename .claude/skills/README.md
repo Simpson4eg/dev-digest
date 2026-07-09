@@ -22,6 +22,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [pr-self-review](pr-self-review/SKILL.md) | Workflow | Local pre-PR review gate: routes changed files to the matching skills (UI → frontend, backend → onion/fastify/drizzle), blocks `gh pr create`/`git push` on any CRITICAL |
 | [skill-routing](skill-routing/SKILL.md) | Workflow | Canonical path→skill mapping — the single source of truth shared by the planner, implementer, test-writer, reviewers, and the PR gate |
 | [spec-authoring](spec-authoring/SKILL.md) | Workflow | Requirements-engineering craft: EARS acceptance criteria, INVEST user stories, edge-case & non-functional checklists (used by spec-creator) |
+| [workflow-retro](workflow-retro/SKILL.md) | Workflow | Manual post-run retrospective of a multi-agent SDD run: tokens/cache/tool-calls/parallelism (incl. nested subagents), insights → tuning actions, trend line in `docs/retros/ledger.md` |
 
 ## What Are Skills?
 

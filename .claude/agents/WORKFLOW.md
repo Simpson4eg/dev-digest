@@ -122,6 +122,16 @@ and the reviewer re-passes.
   reasoning, revisit if quality drops). No opus agent runs in the automated `/implement`
   pipeline.
 
+## After a run — retro (manual)
+
+A full pipeline pass is a multi-agent run whose real cost hides in the fan-out. When a run is
+worth dissecting, invoke the **`workflow-retro`** skill: it measures tokens / cache-hit /
+tool-calls / parallelism **including nested subagents** (which the parent `<usage>` omits),
+turns that into concrete tuning actions (tighten a brief, pre-fetch a shared file, merge/split
+agents, change concurrency, fix a model mismatch), and appends a trend line to
+`docs/retros/ledger.md`. It is **manual, never hooked**, and is the entry point for the L07/L08
+observability & cost work.
+
 ## Automated subset — the `/implement` command
 
 `.claude/commands/implement.md` runs the **downstream** half of this pipeline automatically
