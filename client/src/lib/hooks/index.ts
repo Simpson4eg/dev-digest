@@ -34,3 +34,12 @@ export { useRunTrace } from "./trace";
 // repo-intel
 export type { RepoIntelState } from "./repo-intel";
 export { useRepoIntelStatus, useResyncRepoIntel } from "./repo-intel";
+
+// project-context docs (discovery reader)
+export { useContextDocs } from "./project-context";
+
+// agent context-docs attachment (Task 7)
+export { useAgentContextDocs, useSetAgentContextDocs } from "./agents";
+
+// skill context-docs attachment (Task 8)
+export { useSkillContextDocs, useSetSkillContextDocs } from "./skills";

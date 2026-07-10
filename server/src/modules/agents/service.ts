@@ -1,6 +1,7 @@
 import type { Container } from '../../platform/container.js';
 import type {
   Agent,
+  AgentContextDocsResponse,
   AgentSkillLink,
   AgentVersion,
   CiFailOn,
@@ -206,5 +207,53 @@ export class AgentsService {
     } catch {
       return [];
     }
+  }
+
+  // ---- Context-doc attachment (Task 5) ------------------------------------
+
+  /**
+   * Get the ordered list of context-doc paths attached to an agent.
+   * Returns undefined when the agent doesn't exist in this workspace (→ 404).
+   */
+  async getContextDocs(
+    workspaceId: string,
+    agentId: string,
+  ): Promise<AgentContextDocsResponse | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    const rows = await this.repo.linkedContextDocs(workspaceId, agentId);
+    return { paths: rows.map((r) => r.path) };
+  }
+
+  /**
+   * Replace the full ordered set of context-doc paths for an agent (AC-4, AC-6,
+   * AC-7). Mirrors the `setSkills` full-replace pattern (`service.ts:158-179`).
+   *
+   * Tenant safety: agent existence check is workspace-scoped (INSIGHTS 2026-06-29).
+   * Duplicate-path check mirrors the duplicate-skill-id check at service.ts:165.
+   *
+   * Returns undefined when the agent doesn't exist in this workspace (→ 404).
+   */
+  async setContextDocs(
+    workspaceId: string,
+    agentId: string,
+    paths: string[],
+  ): Promise<AgentContextDocsResponse | undefined> {
+    // Tenant safety: must verify agent belongs to this workspace before writing.
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+
+    if (new Set(paths).size !== paths.length) {
+      throw new ValidationError('paths must not contain duplicates');
+    }
+
+    // Full-replace (mirrors setSkills / setContextDocs repo pattern).
+    await this.repo.setContextDocs(agentId, paths);
+    // Context-doc attachment is agent configuration — bump version (mirrors
+    // setSkills at service.ts:177).
+    await this.repo.bumpVersion(workspaceId, agentId);
+
+    const rows = await this.repo.linkedContextDocs(workspaceId, agentId);
+    return { paths: rows.map((r) => r.path) };
   }
 }

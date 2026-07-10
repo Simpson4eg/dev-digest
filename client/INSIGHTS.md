@@ -80,6 +80,9 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 - 2026-06-23 · `MISSING_MESSAGE: Could not resolve 'prReview.list.columns.<key>'` — `COLUMN_KEYS` and `messages/en/prReview.json` are out of sync · evidence: `client/src/app/repos/[repoId]/pulls/constants.ts:42-50` + `client/messages/en/prReview.json:89-97`
   next-intl gives no build-time error and no TS error — it silently falls back to the key string and logs a console warning at runtime. Whenever a column is added to or removed from `COLUMN_KEYS`, the matching key under `list.columns` in `client/messages/en/prReview.json` must be updated in the same commit. There is no automated check enforcing this.
 
+- 2026-07-10 · Next.js 15 `app/` dynamic-segment pages CANNOT receive `params` as a prop in client components — must use `useParams()` · evidence: `client/src/app/repos/[repoId]/context-docs/page.tsx:9` vs build failure at `.next/types/app/repos/[repoId]/context-docs/page.ts:34`
+  `tsc --noEmit` passes silently with the wrong prop shape, but `next build` fails with "Type '{ params: { repoId: string; } }' does not satisfy the constraint 'PageProps'" because it generates its own stricter type-check in `.next/types/**`. Use `useParams<{ repoId: string }>()` from `next/navigation` instead of declaring `{ params: { repoId: string } }` as props. All existing dynamic pages follow this pattern (`pulls/page.tsx`, `agents/[id]/page.tsx`) — copy it rather than inventing.
+
 ## Session Notes
 
 ## Open Questions

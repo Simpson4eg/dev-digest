@@ -25,3 +25,4 @@ and schemas that already exist.
 ## Index
 
 <!-- spec-creator appends one line per spec below: - [SPEC-NN Title](file.md) — hook — Status -->
+- [SPEC-01 Project Context](SPEC-01-project-context.md) — manual-attach repo markdown as untrusted `## Project context` that steers review agents; zero new LLM calls — implemented

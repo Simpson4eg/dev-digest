@@ -59,4 +59,16 @@ export const qk = {
 
   // ---- conventions ----
   conventions: (repoId: string | null | undefined) => ["conventions", repoId] as const,
+
+  // ---- project-context docs (discovery reader, Task 3/6) ----
+  /** Discovered .md docs under specs/docs/insights for a repo. */
+  contextDocs: (repoId: string | null | undefined) => ["context-docs", repoId] as const,
+
+  // ---- agent context-docs attachment (Task 7) ----
+  /** Attached context-doc paths for one agent (ordered list). */
+  agentContextDocs: (agentId: string | null | undefined) => ["agent-context-docs", agentId] as const,
+
+  // ---- skill context-docs attachment (Task 8) ----
+  /** Attached context-doc paths for one skill (ordered list). */
+  skillContextDocs: (skillId: string | null | undefined) => ["skill-context-docs", skillId] as const,
 };

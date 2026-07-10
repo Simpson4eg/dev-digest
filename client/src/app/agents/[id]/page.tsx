@@ -14,7 +14,7 @@ import { useActiveRepo } from "@/lib/providers/repo-context";
 import { ApiError } from "@/lib/api";
 import { s } from "./styles";
 
-const VALID_TABS = ["config", "skills", "history"];
+const VALID_TABS = ["config", "skills", "context", "history"];
 
 export default function AgentEditorPage() {
   const params = useParams<{ id: string }>();

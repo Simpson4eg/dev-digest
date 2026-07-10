@@ -3,6 +3,12 @@ import type { SkillSource, SkillStats, SkillType } from '@devdigest/shared';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 
+/** A context-doc path attached to a skill (with its order), from skill_context_docs. */
+export interface LinkedSkillContextDocRow {
+  path: string;
+  order: number;
+}
+
 export interface InsertSkill {
   workspaceId: string;
   name: string;
@@ -194,5 +200,38 @@ export class SkillsRepository {
         .map(([category, count]) => ({ category, count }))
         .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category)),
     };
+  }
+
+  // ---- skill_context_docs link table (Task 2 — attachment persistence) ----
+
+  /**
+   * Context-doc paths attached to a skill, in `order` ascending.
+   *
+   * Tenant safety: joins through `skills.workspace_id` (mirrors the
+   * `linkedSkills` pattern at agents/repository.ts:199). The join table itself
+   * has no `workspace_id`, so this WHERE clause is the fence (INSIGHTS 2026-06-29).
+   */
+  async linkedContextDocs(workspaceId: string, skillId: string): Promise<LinkedSkillContextDocRow[]> {
+    const rows = await this.db
+      .select({ path: t.skillContextDocs.path, order: t.skillContextDocs.order })
+      .from(t.skillContextDocs)
+      .innerJoin(t.skills, eq(t.skillContextDocs.skillId, t.skills.id))
+      .where(and(eq(t.skillContextDocs.skillId, skillId), eq(t.skills.workspaceId, workspaceId)))
+      .orderBy(asc(t.skillContextDocs.order));
+    return rows;
+  }
+
+  /**
+   * Replace the full ordered set of context-doc paths for a skill.
+   * Order = array index. Paths not in the list are detached (AC-7).
+   */
+  async setContextDocs(skillId: string, paths: string[]): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(t.skillContextDocs).where(eq(t.skillContextDocs.skillId, skillId));
+      if (paths.length === 0) return;
+      await tx
+        .insert(t.skillContextDocs)
+        .values(paths.map((path, i) => ({ skillId, path, order: i })));
+    });
   }
 }

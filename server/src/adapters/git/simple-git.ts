@@ -1,6 +1,6 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { join, resolve, sep } from 'node:path';
-import { mkdir, readFile, access, rm } from 'node:fs/promises';
+import { join, resolve, sep, relative } from 'node:path';
+import { mkdir, readFile, access, rm, glob, lstat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type {
   GitClient,
@@ -136,6 +136,72 @@ export class SimpleGitClient implements GitClient {
       throw new Error(`Path "${path}" escapes the clone directory`);
     }
     return readFile(resolved, 'utf8');
+  }
+
+  /**
+   * Discover files matching `globs` in the cloned repo. Returns repo-relative
+   * paths (forward-slash separated, no leading slash), containment-checked.
+   *
+   * Security design:
+   *  PRIMARY defence — each discovered path is resolved and verified to start
+   *  with `base + sep` (mirrors readFile's check at the lines above).
+   *  SECONDARY defence — symlinks are excluded via `lstat`; a symlink that
+   *  resolves outside the tree would pass the startsWith check only if the
+   *  real path is inside, but excluding symlinks entirely is defence-in-depth.
+   *  Windows guard — `path.isAbsolute('/x')` is false on Windows, so the
+   *  startsWith(base+sep) check is the reliable barrier (not isAbsolute).
+   *
+   * Returns [] when the clone directory does not exist (repo not yet cloned).
+   */
+  async listFiles(repo: RepoRef, globs: string[]): Promise<string[]> {
+    const cloneDir = this.clonePathFor(repo);
+    const base = cloneDir.endsWith(sep) ? cloneDir : cloneDir + sep;
+
+    // Bail early if the repo isn't cloned yet.
+    if (!(await this.exists(cloneDir))) return [];
+
+    // Use a Set to deduplicate paths discovered by multiple overlapping globs
+    // (e.g., a file at specs/docs/guide.md matches both patterns).
+    const seen = new Set<string>();
+    const results: string[] = [];
+    for (const pattern of globs) {
+      // FIX 2 (robustness): wrap per-pattern glob in try/catch so a malformed
+      // pattern (e.g. a folder name containing a glob metacharacter or brace)
+      // degrades to an empty contribution rather than surfacing as a 500.
+      try {
+        for await (const entry of glob(pattern, { cwd: cloneDir })) {
+          // `entry` is an OS-native relative path (may use backslash on Windows).
+          // Resolve to absolute for the containment check.
+          const abs = resolve(join(cloneDir, entry));
+
+          // PRIMARY containment check — reuse the same invariant as readFile.
+          if (!abs.startsWith(base)) continue;
+
+          // SECONDARY: exclude symlinks so a symlinked directory named specs/
+          // docs/ insights/ cannot point outside the repo tree.
+          let stat;
+          try {
+            stat = await lstat(abs);
+          } catch {
+            // Path vanished between glob and lstat — skip.
+            continue;
+          }
+          if (stat.isSymbolicLink()) continue;
+
+          // Normalise to forward-slash repo-relative path and deduplicate.
+          const rel = relative(cloneDir, abs).replace(/\\/g, '/');
+          if (!seen.has(rel)) {
+            seen.add(rel);
+            results.push(rel);
+          }
+        }
+      } catch {
+        // Malformed pattern (e.g. brace/metachar in a folder name) — skip this
+        // pattern and continue with the rest. Degrades to {} docs from this
+        // pattern rather than throwing, consistent with the empty-repo contract.
+      }
+    }
+    return results;
   }
 }
 

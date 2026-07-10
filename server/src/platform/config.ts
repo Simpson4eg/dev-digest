@@ -36,6 +36,10 @@ const EnvSchema = z.object({
     (v) => (v === '' ? undefined : v),
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   ),
+  // Comma-separated folder-name list for Project Context discovery (AC-2, D2).
+  // Folders at any depth whose segment name matches one of these are globbed for
+  // .md files. Default: specs,docs,insights.
+  CONTEXT_FOLDER_NAMES: z.string().optional(),
 });
 
 export type AppConfig = {
@@ -59,6 +63,13 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /**
+   * Folder-name segments whose .md files are discoverable as Project Context
+   * (AC-2, D2: global, not per-workspace). Folders at any repo depth whose
+   * segment name is in this list are globbed for *.md files. Configurable via
+   * CONTEXT_FOLDER_NAMES (comma-separated). Default: ['specs','docs','insights'].
+   */
+  contextFolderNames: string[];
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -77,5 +88,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    contextFolderNames: parsed.CONTEXT_FOLDER_NAMES
+      ? parsed.CONTEXT_FOLDER_NAMES.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : ['specs', 'docs', 'insights'],
   };
 }

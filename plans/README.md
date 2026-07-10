@@ -28,3 +28,5 @@ the full spec → plan → implement → review → verify pipeline.
 ## Index
 
 <!-- implementation-planner appends one line per plan below: - [PLAN-NN Title](file.md) — spec — Status -->
+
+- [PLAN-01 Project Context](PLAN-01-project-context.md) — SPEC-01 — done

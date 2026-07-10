@@ -1,5 +1,13 @@
-import type { Skill, SkillSource, SkillStats, SkillType, SkillVersion } from '@devdigest/shared';
+import type {
+  Skill,
+  SkillContextDocsResponse,
+  SkillSource,
+  SkillStats,
+  SkillType,
+  SkillVersion,
+} from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
+import { ValidationError } from '../../platform/errors.js';
 import { SkillsRepository } from './repository.js';
 import { toSkillDto, toSkillVersionDto } from './helpers.js';
 
@@ -63,5 +71,50 @@ export class SkillsService {
   async stats(workspaceId: string, id: string): Promise<SkillStats | undefined> {
     if (!(await this.repo.getById(workspaceId, id))) return undefined;
     return this.repo.stats(workspaceId, id);
+  }
+
+  // ---- Context-doc attachment (Task 5) ------------------------------------
+
+  /**
+   * Get the ordered list of context-doc paths attached to a skill.
+   * Returns undefined when the skill doesn't exist in this workspace (→ 404).
+   */
+  async getContextDocs(
+    workspaceId: string,
+    skillId: string,
+  ): Promise<SkillContextDocsResponse | undefined> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    const rows = await this.repo.linkedContextDocs(workspaceId, skillId);
+    return { paths: rows.map((r) => r.path) };
+  }
+
+  /**
+   * Replace the full ordered set of context-doc paths for a skill (AC-5, AC-7).
+   * Mirrors the agent-side setContextDocs pattern.
+   *
+   * Tenant safety: skill existence check is workspace-scoped (INSIGHTS 2026-06-29).
+   * Duplicate-path check ensures the stored list is a proper ordered set.
+   *
+   * Returns undefined when the skill doesn't exist in this workspace (→ 404).
+   */
+  async setContextDocs(
+    workspaceId: string,
+    skillId: string,
+    paths: string[],
+  ): Promise<SkillContextDocsResponse | undefined> {
+    // Tenant safety: must verify skill belongs to this workspace before writing.
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+
+    if (new Set(paths).size !== paths.length) {
+      throw new ValidationError('paths must not contain duplicates');
+    }
+
+    // Full-replace (mirrors setContextDocs repo pattern).
+    await this.repo.setContextDocs(skillId, paths);
+
+    const rows = await this.repo.linkedContextDocs(workspaceId, skillId);
+    return { paths: rows.map((r) => r.path) };
   }
 }

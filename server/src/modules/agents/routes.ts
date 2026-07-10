@@ -1,7 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
+import {
+  AgentContextDocsResponse,
+  AgentContextDocsSetRequest,
+  CiFailOn,
+  Provider,
+  ReviewStrategy,
+} from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -161,6 +167,43 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
           : await service.linkSkill(workspaceId, req.params.id, body.skill_id!, body.order);
       if (!links) throw new NotFoundError('Agent not found');
       return links;
+    },
+  );
+
+  // ---- Context-doc attachment (Task 5) ------------------------------------
+  // GET  /agents/:id/context-docs  → { paths: string[] } (ordered)
+  // PUT  /agents/:id/context-docs  → { paths: string[] } (full-replace + reorder)
+
+  app.get(
+    '/agents/:id/context-docs',
+    {
+      schema: {
+        params: IdParams,
+        response: { 200: AgentContextDocsResponse },
+      },
+    },
+    async (req): Promise<AgentContextDocsResponse> => {
+      const { workspaceId } = await getContext(app.container, req);
+      const result = await service.getContextDocs(workspaceId, req.params.id);
+      if (!result) throw new NotFoundError('Agent not found');
+      return result;
+    },
+  );
+
+  app.put(
+    '/agents/:id/context-docs',
+    {
+      schema: {
+        params: IdParams,
+        body: AgentContextDocsSetRequest,
+        response: { 200: AgentContextDocsResponse },
+      },
+    },
+    async (req): Promise<AgentContextDocsResponse> => {
+      const { workspaceId } = await getContext(app.container, req);
+      const result = await service.setContextDocs(workspaceId, req.params.id, req.body.paths);
+      if (!result) throw new NotFoundError('Agent not found');
+      return result;
     },
   );
 
