@@ -26,3 +26,4 @@ and schemas that already exist.
 
 <!-- spec-creator appends one line per spec below: - [SPEC-NN Title](file.md) — hook — Status -->
 - [SPEC-01 Project Context](SPEC-01-project-context.md) — manual-attach repo markdown as untrusted `## Project context` that steers review agents; zero new LLM calls — implemented
+- [SPEC-02 Why + Risk Brief](SPEC-02-why-risk-brief.md) — compact PR-page card assembled from L03 intent/smart-diff + L04 blast with exactly one grounded, per-PR-cached LLM call — approved
