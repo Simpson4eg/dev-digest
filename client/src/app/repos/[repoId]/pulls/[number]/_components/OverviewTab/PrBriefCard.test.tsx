@@ -70,9 +70,23 @@ const BRIEF_HIGH: BriefResponse = {
   risk_level: "high",
 };
 
+// A caller-file focus (is_caller_ref: true) → anchors to the indexed `ref` sha.
 const BRIEF_WITH_REF: BriefResponse = {
   ...BRIEF_MEDIUM,
   ref: "idx0000",
+  review_focus: [
+    { file: "src/mw.ts", line: 42, symbol: null, reason: "Core middleware change", is_caller_ref: true },
+  ],
+};
+
+// A changed-file focus (is_caller_ref: false) with a ref set → must still anchor to headSha,
+// because a file changed in the PR exists at the PR head, not at the indexed commit.
+const BRIEF_REF_CHANGED_FILE: BriefResponse = {
+  ...BRIEF_MEDIUM,
+  ref: "idx0000",
+  review_focus: [
+    { file: "src/new.ts", line: 7, symbol: null, reason: "New file added in PR", is_caller_ref: false },
+  ],
 };
 
 const BRIEF_OUTDATED: BriefResponse = {
@@ -143,16 +157,29 @@ describe("review_focus links (AC-16)", () => {
     );
   });
 
-  it("anchors focus link to blast ref sha when brief.ref is set (AC-10)", () => {
+  it("anchors a caller-file focus to the blast ref sha when set (AC-10)", () => {
     useBrief.mockReturnValue({ data: BRIEF_WITH_REF, isLoading: false });
     useRegenerateBrief.mockReturnValue(NOOP_REGEN);
     render(<PrBriefCard {...PROPS} />);
 
-    // BRIEF_WITH_REF has ref: "idx0000" → must override headSha
+    // is_caller_ref: true + ref "idx0000" → anchors to the indexed commit
     const link = screen.getByText("src/mw.ts:42").closest("a");
     expect(link).toHaveAttribute(
       "href",
       "https://github.com/acme/web/blob/idx0000/src/mw.ts#L42",
+    );
+  });
+
+  it("anchors a changed-file focus to headSha even when brief.ref is set (per-item fix)", () => {
+    useBrief.mockReturnValue({ data: BRIEF_REF_CHANGED_FILE, isLoading: false });
+    useRegenerateBrief.mockReturnValue(NOOP_REGEN);
+    render(<PrBriefCard {...PROPS} />);
+
+    // is_caller_ref: false → must use headSha "head000", NOT the indexed ref "idx0000"
+    const link = screen.getByText("src/new.ts:7").closest("a");
+    expect(link).toHaveAttribute(
+      "href",
+      "https://github.com/acme/web/blob/head000/src/new.ts#L7",
     );
   });
 

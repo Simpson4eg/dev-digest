@@ -109,12 +109,18 @@ function RiskCard({ risk }: { risk: BriefRisk }) {
 function FocusItem({
   focus,
   repoFullName,
-  linkSha,
+  refSha,
+  headSha,
 }: {
   focus: ReviewFocus;
   repoFullName: string | null | undefined;
-  linkSha: string | null | undefined;
+  refSha: string | null | undefined;
+  headSha: string | null | undefined;
 }) {
+  // Per-item anchor: a caller-file comes from the indexed snapshot → anchor to the blast
+  // `ref` sha; a changed-file exists at the PR head → anchor to headSha. Using one sha for
+  // every link 404s the other kind of file (AC-10, per-item fix).
+  const linkSha = focus.is_caller_ref && refSha ? refSha : headSha;
   const canLink = !!repoFullName && !!linkSha;
   // Build the deep link. If `line` is present, anchor to that line (D8, AC-16).
   const href = canLink
@@ -155,10 +161,8 @@ export function PrBriefCard({
 
   if (isLoading) return null;
 
-  // Ref-anchor pattern: EXACT copy of BlastRadiusPanel.tsx:120-122.
-  // Caller-file refs come from the indexed snapshot (brief.ref), not the PR
-  // head, so moved/renamed files don't 404.
-  const linkSha = brief?.ref ?? headSha;
+  // Anchor sha is chosen PER focus item inside FocusItem: caller-files → brief.ref
+  // (indexed snapshot), changed-files → headSha (PR head). See FocusItem.
 
   // AC-3b / AC-16b: empty brief — "not enough signal yet" empty state.
   // Must not present as a blank low-risk card.
@@ -259,7 +263,8 @@ export function PrBriefCard({
                   key={`${f.file}-${i}`}
                   focus={f}
                   repoFullName={repoFullName}
-                  linkSha={linkSha}
+                  refSha={brief?.ref}
+                  headSha={headSha}
                 />
               ))}
             </div>

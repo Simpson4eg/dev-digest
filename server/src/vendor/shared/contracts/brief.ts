@@ -179,6 +179,12 @@ export const ReviewFocus = z.object({
   line: z.number().int().nullish(),
   symbol: z.string().nullish(),
   reason: z.string(),
+  // Server-populated during grounding (NOT the LLM): true when this focus file is a
+  // blast caller-file (from the indexed snapshot) so the client anchors its click-to-code
+  // link to the indexed `ref` sha; false/absent → anchor to the PR head sha. This keeps
+  // caller-files (exist at the index) and changed-files (exist at PR head) from 404-ing
+  // against the wrong commit (AC-10, per-item anchor fix).
+  is_caller_ref: z.boolean().nullish(),
 });
 export type ReviewFocus = z.infer<typeof ReviewFocus>;
 

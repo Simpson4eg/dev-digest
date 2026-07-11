@@ -323,7 +323,12 @@ async function runFreshPath(
     why: composed.brief.why,
     risk_level: composed.brief.risk_level,
     risks: groundingResult.groundedRisks.map((r) => r.risk),
-    review_focus: groundingResult.groundedFocus.map((f) => f.focus),
+    // Carry the per-item caller-file flag so the client anchors each link to the right
+    // commit: caller-files → indexed `ref` sha, changed-files → PR head (AC-10 per-item).
+    review_focus: groundingResult.groundedFocus.map((f) => ({
+      ...f.focus,
+      is_caller_ref: f.isCallerFileRef,
+    })),
   };
 
   // ---- 4g. Cache + observe (AC-17/18) ----------------------------------------
