@@ -166,3 +166,69 @@ export const PrBrief = z.object({
   history: PrHistory,
 });
 export type PrBrief = z.infer<typeof PrBrief>;
+
+// ---- Why + Risk Brief (LLM-composed, one call per fresh brief) ----
+// New thin LLM-facing artifact. Lives BESIDE PrBrief — does NOT replace it (D1).
+// Do NOT rename PrBrief or any existing contract above.
+
+// File + line/symbol location so the card can deep-link to a specific place (D8, AC-9).
+// Grounding (T5) matches on file presence in evidence; line/symbol carried through for
+// the click-to-code anchor. At least one of line/symbol should be present for useful anchors.
+export const ReviewFocus = z.object({
+  file: z.string(),
+  line: z.number().int().nullish(),
+  symbol: z.string().nullish(),
+  reason: z.string(),
+});
+export type ReviewFocus = z.infer<typeof ReviewFocus>;
+
+// Thinner bespoke risk shape for the brief (no `kind` field — that is a finding-category
+// marker not relevant to the brief card). Keeps file_refs + severity: RiskSeverity so the
+// grounding gate (T5, AC-8) and the risk-level color map (T8) have exactly what they need.
+// Choice rationale: Risk (brief.ts:96-103) includes `kind` which is a finding classifier;
+// BriefRisk omits it intentionally. Both `file_refs` and `severity` are preserved verbatim.
+export const BriefRisk = z.object({
+  title: z.string(),
+  explanation: z.string(),
+  severity: RiskSeverity,
+  file_refs: z.array(z.string()),
+});
+export type BriefRisk = z.infer<typeof BriefRisk>;
+
+// Distinguishes cache hit vs fresh call (AC-18). Orthogonal to `materialized`.
+export const BriefSource = z.enum(['fresh', 'cache']);
+export type BriefSource = z.infer<typeof BriefSource>;
+
+// The LLM-composed human-facing brief. risk_level REUSES RiskSeverity (brief.ts:93),
+// no new vocabulary (D2, AC-15).
+export const Brief = z.object({
+  what: z.string(),
+  why: z.string(),
+  risk_level: RiskSeverity,
+  risks: z.array(BriefRisk),
+  review_focus: z.array(ReviewFocus),
+});
+export type Brief = z.infer<typeof Brief>;
+
+// Response/record wrapper. Fields the repo layer cannot fill are .nullable().optional()
+// per the INSIGHTS 2026-06-20 precedent (trace.ts:94-114).
+// `materialized` is an ORTHOGONAL flag to `source` (plan Recommendations):
+//   - source: 'cache' | 'fresh'  answers "where did this come from?" (AC-18)
+//   - materialized: boolean       answers "was there enough signal for an LLM call?" (AC-3b)
+//   A served empty brief (AC-3b) has materialized=false; a cached or fresh brief has materialized=true.
+export const BriefResponse = Brief.extend({
+  // blast ref sha so the client can anchor caller-file links to the indexed commit (AC-10).
+  ref: z.string().nullable().optional(),
+  // The PR head sha the brief was built against (AC-14b outdated detection).
+  built_head_sha: z.string().nullable().optional(),
+  // True when the served brief was built at an older head sha than the PR's current head (AC-14b).
+  outdated: z.boolean().nullable().optional(),
+  // Cache hit vs fresh call (AC-18).
+  source: BriefSource.nullable().optional(),
+  // Assembled-input token count so the <=8K budget is verifiable after the fact (AC-17).
+  input_tokens: z.number().int().nullable().optional(),
+  // True if the brief was produced from a substantive LLM call; false for the empty
+  // "not enough signal yet" brief (AC-3b). Orthogonal to source.
+  materialized: z.boolean(),
+});
+export type BriefResponse = z.infer<typeof BriefResponse>;

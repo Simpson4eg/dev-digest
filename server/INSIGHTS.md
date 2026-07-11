@@ -60,6 +60,9 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 - 2026-07-10 · The Claude Write and Edit tools are both denied for `client/src/vendor/shared/**` (`.claude/settings.local.json`), but **Bash `cp`** is NOT denied — use `cp -f <server-file> <client-file>` in a Bash tool call to propagate contract changes · evidence: `.claude/settings.local.json:19-20`
   This is the only viable propagation path from within a Claude session. Both `Write(client/src/vendor/shared/**)` and `Edit(client/src/vendor/shared/**)` are in the `deny` list; `cat >` via Bash is also blocked because the shell redirects into the denied path. Plain `cp -f` works because `cp` is an allowed Bash command. Add `index.ts` to the copy list whenever a new contract file is added (the barrel references it by `.js` extension in the `export * from` lines).
 
+- 2026-07-11 · `BriefRisk` is a THINNER bespoke shape than `Risk` — it intentionally omits `kind` (the finding-category classifier) · evidence: `server/src/vendor/shared/contracts/brief.ts:190-196`
+  `Risk` (brief.ts:96-103) carries `kind: z.string()` which is a finding classifier. `BriefRisk` drops it because the brief card's grounding gate (T5, AC-8) and color map (T8) only need `file_refs` + `severity`. Downstream tasks MUST use `BriefRisk` (not `Risk`) when typing brief risks — the schemas are not interchangeable. `BriefSource` (`'fresh'|'cache'`) and `materialized: boolean` are two ORTHOGONAL flags on `BriefResponse`: `source` answers AC-18 (cache vs fresh); `materialized` answers AC-3b (empty-signal vs real brief).
+
 ## Recurring Errors & Fixes
 
 - 2026-06-29 · RESOLVED: DB CLI entrypoints must normalize `process.argv[1]` with `pathToFileURL(resolve(...))` on Windows · evidence: `server/src/db/{migrate,seed}.ts`
@@ -96,6 +99,12 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 
 - 2026-07-10 · `filterContextPaths` was exported + unit-tested but never called in production until the injection-point security fix — it is now the gate in `run-executor.ts` before `readFile` · evidence: `server/src/modules/reviews/run-executor.ts:244-248` + `server/src/modules/project-context/discover.ts:27`
   Any stored path (e.g. `.git/config`, `.env`, `src/index.ts`) that is NOT a `.md` file under a configured context folder is silently dropped before the read loop. The containment check in `readFile` remains as defence-in-depth but is no longer the only barrier. The safety-log line (`"not a discoverable context doc, skipped"`) is the signal that a stored path was filtered; its presence in the integration test verifies the gate is active.
+
+- 2026-07-11 · `BriefRepository.getByPull` rewrites `source` from `'fresh'` (stored value) to `'cache'` (returned value) — Task 6 must NOT read the raw column for AC-18 · evidence: `server/src/modules/brief/repository.ts:57-58`
+  The `pr_brief_cache.source` column always stores `'fresh'` (the value at write time); the repo layer rewrites to `'cache'` on `getByPull` so the caller sees the correct AC-18 distinction without an extra column or flag. If Task 6 (service) bypasses the repository and reads the column directly it will always see `'fresh'` — always go through `BriefRepository.getByPull`.
+
+- 2026-07-11 · `groundBrief` (T5) sets `isCallerFileRef=true` even when a file appears BOTH in `changed_symbols` AND in `downstream.callers` — the caller-file membership wins · evidence: `server/src/modules/brief/ground.ts:155-160`
+  `buildEvidenceSets` tracks `callerFiles` separately; `groundBrief` checks `callerFiles.has(matchedRef)` without subtracting changed-symbol files. A file in both sets gets flagged as a caller-file ref, meaning Task 6 will anchor its link to `blast.ref` sha rather than the PR head. This is a safe conservative choice (the indexed sha is always a valid anchor for a changed file too), but Task 6 must not assume `isCallerFileRef=false` implies the file is absent from callers.
 
 ## Session Notes
 

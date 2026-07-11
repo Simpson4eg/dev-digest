@@ -53,6 +53,8 @@ export const qk = {
   smartDiff: (prId: string | null | undefined) => ["smart-diff", prId] as const,
   /** Blast Radius: changed symbols → downstream callers → impacted endpoints. */
   prBlastRadius: (prId: string | null | undefined) => ["pr-blast-radius", prId] as const,
+  /** Why + Risk Brief: LLM-composed brief per PR (one call fresh, zero on cache hit). */
+  prBrief: (prId: string | null | undefined) => ["pr-brief", prId] as const,
 
   // ---- run trace ----
   runTrace: (runId: string | null | undefined) => ["run-trace", runId] as const,

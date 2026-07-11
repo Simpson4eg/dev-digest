@@ -72,3 +72,19 @@ export const api = {
     apiFetch<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
 };
+
+// ---- Typed helpers for specific domain calls ----
+
+import type { BriefResponse } from "@devdigest/shared";
+
+/** POST /pulls/:id/brief — fetch (or regenerate) the Why+Risk brief for a PR.
+ *  Passing `regenerate: true` bypasses the cache and forces a fresh LLM call. */
+export function fetchBrief(
+  prId: string,
+  options?: { regenerate?: boolean },
+): Promise<BriefResponse> {
+  return api.post<BriefResponse>(
+    `/pulls/${prId}/brief`,
+    options?.regenerate ? { regenerate: true } : undefined,
+  );
+}

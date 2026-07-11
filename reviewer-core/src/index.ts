@@ -55,6 +55,14 @@ export {
   type ExtractIntentResult,
 } from './review/intent.js';
 
+// Brief Layer: single structured LLM call that composes the Why + Risk Brief.
+export {
+  composeBrief,
+  BRIEF_SYSTEM,
+  type ComposeBriefInput,
+  type ComposeBriefResult,
+} from './review/brief.js';
+
 // Output: grounded Review → GitHubReviewPayload (body + inline comments + event).
 export {
   toReviewPayload,

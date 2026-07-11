@@ -9,6 +9,7 @@ import skills from './skills/routes.js';
 import reviews from './reviews/routes.js';
 import smartDiff from './smart-diff/routes.js';
 import blast from './blast/routes.js';
+import brief from './brief/routes.js';
 import repoIntel from './repo-intel/routes.js';
 import conventions from './conventions/routes.js';
 import projectContext from './project-context/routes.js';
@@ -37,6 +38,7 @@ export const modules: Record<string, FastifyPluginAsync> = {
   reviews,
   smartDiff,
   blast,
+  brief,
   repoIntel,
   conventions,
   projectContext,

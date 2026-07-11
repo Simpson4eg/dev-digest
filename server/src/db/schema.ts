@@ -16,6 +16,7 @@ export * from './schema/core';
 export * from './schema/repos';
 export * from './schema/pulls';
 export * from './schema/reviews';
+export * from './schema/brief';
 export * from './schema/skills';
 export * from './schema/agents';
 export * from './schema/knowledge';
@@ -30,6 +31,7 @@ import { users, workspaces, workspaceMembers, settings } from './schema/core';
 import { repos } from './schema/repos';
 import { pullRequests, prFiles, prCommits } from './schema/pulls';
 import { reviews, findings, prIntent, prBrief } from './schema/reviews';
+import { prBriefCache } from './schema/brief';
 import { skills, skillVersions, skillContextDocs } from './schema/skills';
 import { agents, agentVersions, agentSkills, agentContextDocs } from './schema/agents';
 import { memory, conventions } from './schema/knowledge';
@@ -60,6 +62,7 @@ export const schema = {
   findings,
   prIntent,
   prBrief,
+  prBriefCache,
   skills,
   skillVersions,
   skillContextDocs,
