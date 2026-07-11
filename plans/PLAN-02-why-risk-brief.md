@@ -281,7 +281,10 @@ T5 owns `ground.ts`, T6 owns `routes.ts`+`service.ts`+`repository.ts` consumptio
     - **Untrusted framing:** produce the input as blocks the compose fn (T4) will render through
       `assemblePrompt`'s untrusted slots — intent text, issue body, spec texts are attacker-
       influenceable (spec Untrusted-inputs). This fn only structures them; the fencing is T4's
-      `wrapUntrusted` under `INJECTION_GUARD`.
+      `wrapUntrusted` under `INJECTION_GUARD`. **(cross-model #1)** Keep each untrusted input as a
+      **discrete field** — never concatenate untrusted text into a single trusted string here, or
+      T4's per-field fencing can be defeated. The pure fn hands T4 separable untrusted values, not a
+      pre-merged blob.
     - **Budget (AC-4/AC-17):** expose the assembled input to `container.tokenizer.count`
       (`container.ts:139-144`); T6 measures and records the count. Design the assembled object so it
       can be measured before the call.
@@ -289,6 +292,11 @@ T5 owns `ground.ts`, T6 owns `routes.ts`+`service.ts`+`repository.ts` consumptio
       (1) Project Context spec texts → (2) `prior_prs` → (3) `downstream` callers beyond top-N by
       caller count → (4) `SmartDiff` `boilerplate`-group file rows. **Never** drop `intent` text or
       `blast.summary`. Deterministic: identical PR state → identical assembled input.
+    - **Final clamp (cross-model #3):** if the input is **still > 8K after all fixed-order drops**
+      (e.g. a huge `intent` text or `blast.summary`, which are never dropped), apply a last-resort
+      **character-budget truncation** to those never-dropped fields (truncate + ellipsis marker) so
+      the ≤8K invariant (AC-4) **always** holds and the request still never fails. This is the only
+      place protected fields may be shortened, and only to keep AC-4 true; unit-test it.
     - **Empty detection (AC-3/AC-3b):** each artifact optional; omit absent sections (AC-3). Expose a
       predicate for **fully-empty** (no intent, blast `degraded`/`no_data`, no smart-diff finding
       overlay, no linked issue) so T6 can short-circuit to the empty brief with **zero** LLM calls
