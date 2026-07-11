@@ -30,3 +30,4 @@ the full spec → plan → implement → review → verify pipeline.
 <!-- implementation-planner appends one line per plan below: - [PLAN-NN Title](file.md) — spec — Status -->
 
 - [PLAN-01 Project Context](PLAN-01-project-context.md) — SPEC-01 — done
+- [PLAN-02 Why + Risk Brief](PLAN-02-why-risk-brief.md) — SPEC-02 — draft
