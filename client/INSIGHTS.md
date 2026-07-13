@@ -86,6 +86,9 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
 - 2026-07-10 · Next.js 15 `app/` dynamic-segment pages CANNOT receive `params` as a prop in client components — must use `useParams()` · evidence: `client/src/app/repos/[repoId]/context-docs/page.tsx:9` vs build failure at `.next/types/app/repos/[repoId]/context-docs/page.ts:34`
   `tsc --noEmit` passes silently with the wrong prop shape, but `next build` fails with "Type '{ params: { repoId: string; } }' does not satisfy the constraint 'PageProps'" because it generates its own stricter type-check in `.next/types/**`. Use `useParams<{ repoId: string }>()` from `next/navigation` instead of declaring `{ params: { repoId: string } }` as props. All existing dynamic pages follow this pattern (`pulls/page.tsx`, `agents/[id]/page.tsx`) — copy it rather than inventing.
 
+- 2026-07-13 · Stale `.next/types` can make `pnpm typecheck` fail on routes that no longer exist · evidence: `.next/types/app/evals/page.ts` after `evals/` was removed from `client/src/app`
+  `tsc --noEmit` includes generated Next types, so a removed/renamed route can keep failing from `.next/types/**` even when `src/app/**` is clean. If the error points only at `.next/types/.../<old route>/page.ts`, delete generated `.next` and rerun; `pnpm build` will regenerate the authoritative route types.
+
 ## Session Notes
 
 ## Open Questions
