@@ -75,10 +75,19 @@ it. See `.claude/skills/capturing-insights/examples.md` for bad/good pairs.
   project open, then re-run `pnpm install`. Do NOT delete `node_modules` — a
   full reinstall here is slow and unnecessary.
 
+- 2026-07-11 · `SectionLabel icon=` prop is strictly typed to the `IconName` union — only the icons explicitly registered in `vendor/ui/icons.tsx` are valid · evidence: `client/src/vendor/ui/icons.tsx:86-165` + `PrBriefCard.tsx` (initial `"BookOpen"` caused type error)
+  lucide-react has many icons not in the registry (`BookOpen`, `FileCode`, etc). `tsc` catches this immediately but the error message lists 60+ valid names without a clear "not registered" hint. Before using an icon in a new component, verify it appears in `icons.tsx`. The current set includes `Lightbulb`, `Info`, `FileText`, `Target`, `Zap`, `Shield`, `Sparkles` as semantically useful alternatives.
+
 ## Recurring Errors & Fixes
 
 - 2026-06-23 · `MISSING_MESSAGE: Could not resolve 'prReview.list.columns.<key>'` — `COLUMN_KEYS` and `messages/en/prReview.json` are out of sync · evidence: `client/src/app/repos/[repoId]/pulls/constants.ts:42-50` + `client/messages/en/prReview.json:89-97`
   next-intl gives no build-time error and no TS error — it silently falls back to the key string and logs a console warning at runtime. Whenever a column is added to or removed from `COLUMN_KEYS`, the matching key under `list.columns` in `client/messages/en/prReview.json` must be updated in the same commit. There is no automated check enforcing this.
+
+- 2026-07-10 · Next.js 15 `app/` dynamic-segment pages CANNOT receive `params` as a prop in client components — must use `useParams()` · evidence: `client/src/app/repos/[repoId]/context-docs/page.tsx:9` vs build failure at `.next/types/app/repos/[repoId]/context-docs/page.ts:34`
+  `tsc --noEmit` passes silently with the wrong prop shape, but `next build` fails with "Type '{ params: { repoId: string; } }' does not satisfy the constraint 'PageProps'" because it generates its own stricter type-check in `.next/types/**`. Use `useParams<{ repoId: string }>()` from `next/navigation` instead of declaring `{ params: { repoId: string } }` as props. All existing dynamic pages follow this pattern (`pulls/page.tsx`, `agents/[id]/page.tsx`) — copy it rather than inventing.
+
+- 2026-07-13 · Stale `.next/types` can make `pnpm typecheck` fail on routes that no longer exist · evidence: `.next/types/app/evals/page.ts` after `evals/` was removed from `client/src/app`
+  `tsc --noEmit` includes generated Next types, so a removed/renamed route can keep failing from `.next/types/**` even when `src/app/**` is clean. If the error points only at `.next/types/.../<old route>/page.ts`, delete generated `.next` and rerun; `pnpm build` will regenerate the authoritative route types.
 
 ## Session Notes
 

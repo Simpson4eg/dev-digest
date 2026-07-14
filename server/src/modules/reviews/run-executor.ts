@@ -10,6 +10,8 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY, REVIEW_LANGUAGE } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { resolveEffectiveSet } from './project-context.js';
+import { filterContextPaths } from '../project-context/discover.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -202,6 +204,96 @@ export class ReviewRunExecutor {
         `Skills: ${appliedSkills.length} enabled in prompt${disabledCount > 0 ? `, ${disabledCount} globally disabled` : ''}`,
       );
 
+      // ---- Project-context injection (AC-8..AC-16) --------------------------
+      // Best-effort, OUTSIDE failAll: a bad attachment or unreadable file never
+      // fails the run. The entire block is try/catch so a programming error here
+      // also can't crash a run.
+      //
+      // Security: attached doc text is untrusted (repo files are attacker-
+      // influenceable via a PR). We pass it only through the existing `specs`
+      // param, which routes it through `wrapUntrusted` + `INJECTION_GUARD` inside
+      // reviewer-core (prompt.ts:133-136). We do NOT add keyword/denylist scanning
+      // here — the guard, not pattern-matching, is the defence (reviewer-core AGENTS).
+      let specTexts: string[] = [];
+      let specsRead: string[] = [];
+      const specsTokens: Record<string, number> = {};
+      try {
+        // 1. Load agent's directly-attached paths (ordered, workspace-scoped).
+        const agentDocRows = await this.agents.linkedContextDocs(workspaceId, agent.id);
+        const agentPaths = agentDocRows.map((r) => r.path);
+
+        // 2. Load skill-inherited paths for ENABLED skills only (AC-10).
+        //    Reuse the already-loaded `linkedSkills` and its enabled-skill filter.
+        //    `linkedSkills` is already workspace-filtered (skills.workspaceId) so
+        //    no cross-workspace leak (server INSIGHTS 2026-06-29).
+        const enabledSkillLinks = linkedSkills.filter((link) => link.skill.enabled);
+        const skillDocInputs = await Promise.all(
+          enabledSkillLinks.map(async (link) => {
+            const rows = await this.container.skillsRepo.linkedContextDocs(workspaceId, link.skill.id);
+            return { skillId: link.skill.id, paths: rows.map((r) => r.path) };
+          }),
+        );
+
+        // 3. Resolve ordered, deduped effective set (AC-8, AC-9).
+        const effectivePaths = resolveEffectiveSet(agentPaths, skillDocInputs);
+
+        // 3b. Security filter (FIX 1): only paths that are discoverable context
+        //     docs may be injected. A stored path that isn't a real context doc
+        //     (e.g. ".git/config", ".env", a ".ts" source file) is silently
+        //     skipped here — it never reaches readFile. This is the injection-
+        //     point guard; filterContextPaths is now live (not dead) code.
+        const safetyFilteredPaths = filterContextPaths(
+          effectivePaths,
+          this.container.config.contextFolderNames,
+        );
+        for (const path of effectivePaths) {
+          if (!safetyFilteredPaths.includes(path)) {
+            runLog.info(`project-context: ${path} not a discoverable context doc, skipped`);
+          }
+        }
+
+        if (safetyFilteredPaths.length > 0) {
+          runLog.info(`project-context: ${safetyFilteredPaths.length} effective doc(s) to read`);
+        }
+
+        // 4. Read all paths concurrently (FIX 3), best-effort via the
+        //    containment-checked git adapter (readFile resolves under
+        //    clonePathFor + asserts startsWith(base+sep)).
+        //    On missing / moved / unreadable: skip + log + continue (AC-16).
+        //    Promise.allSettled preserves the original order of safetyFilteredPaths.
+        const readResults = await Promise.allSettled(
+          safetyFilteredPaths.map((path) =>
+            this.container.git.readFile({ owner: repo.owner, name: repo.name }, path),
+          ),
+        );
+        for (let i = 0; i < safetyFilteredPaths.length; i++) {
+          const path = safetyFilteredPaths[i]!;
+          const result = readResults[i]!;
+          if (result.status === 'fulfilled') {
+            specTexts.push(result.value);
+            specsRead.push(path);
+            specsTokens[path] = this.container.tokenizer.count(result.value);
+          } else {
+            runLog.info(`project-context: ${path} skipped -- ${(result.reason as Error).message}`);
+          }
+        }
+
+        if (specsRead.length > 0) {
+          const totalTokens = Object.values(specsTokens).reduce((a, b) => a + b, 0);
+          runLog.info(
+            `project-context: ${specsRead.length} doc(s) injected (${totalTokens} token(s) total)`,
+          );
+        }
+      } catch (err) {
+        // Belt-and-suspenders: if the entire context block throws for any reason
+        // (e.g. DB failure reading attachment rows), we log and continue without
+        // any context docs — the run proceeds normally (AC-16 spirit).
+        runLog.info(`project-context: skipped due to error -- ${(err as Error).message}`);
+        specTexts = [];
+        specsRead = [];
+      }
+      // ---- End project-context -----------------------------------------------
+
       // Per-agent repo-intel toggle (Agent editor). When an agent opts out we
       // skip all enrichment entirely so its prompt is identical to the
       // repo-intel-off baseline — independent of the global REPO_INTEL_ENABLED
@@ -248,6 +340,10 @@ export class ReviewRunExecutor {
         // Intent Layer — derived motivation + scope (untrusted). Omitted when the
         // pre-work intent pass produced nothing (missing key, LLM error, …).
         ...(intentText ? { intent: intentText } : {}),
+        // Project context — attached doc texts (untrusted, via wrapUntrusted +
+        // INJECTION_GUARD in reviewer-core). Omitted when the effective set is
+        // empty so the prompt is byte-identical to today's (AC-12).
+        ...(specTexts.length > 0 ? { specs: specTexts } : {}),
         task,
         // Pin the model's natural-language output to the product language (else
         // some cheap models reply in their native language).
@@ -322,6 +418,9 @@ export class ReviewRunExecutor {
           skill_tokens: outcome.assembly.skills
             ? this.container.tokenizer.count(outcome.assembly.skills)
             : 0,
+          // AC-15: per-injected-doc token sizes. Null when no docs were injected
+          // (mirrors the skill_tokens precedent at run-executor.ts:322-324).
+          ...(specsRead.length > 0 ? { specs_tokens: specsTokens } : {}),
         },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
@@ -331,7 +430,8 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        // AC-14: repo-relative paths of docs actually read + injected.
+        specs_read: specsRead,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),

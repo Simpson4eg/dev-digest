@@ -16,6 +16,7 @@
   },
   "nav": {
     "pulls": "Pull Requests",
+    "project-context": "Project Context",
     "onboarding-tour": "Onboarding Tour",
     "context": "Project Context",
     "skills": "Skills",

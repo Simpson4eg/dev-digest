@@ -61,3 +61,25 @@ export const agentSkills = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.agentId, t.skillId] }) }),
 );
+
+/**
+ * Ordered context-document attachments for an agent (Task 2 — attachment
+ * persistence). Mirrors the `agent_skills` join-table pattern: no
+ * `workspace_id` here — tenant safety is enforced by always joining through
+ * `agents.workspace_id` (see AgentsRepository.linkedContextDocs).
+ *
+ * AC-4, AC-6: paths only (not doc text); order column gives free reorder.
+ */
+export const agentContextDocs = pgTable(
+  'agent_context_docs',
+  {
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    /** Repo-relative forward-slash path, e.g. "specs/SPEC-01.md". */
+    path: text('path').notNull(),
+    /** Attachment order within the agent; ascending = render order. */
+    order: integer('order').notNull().default(0),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.agentId, t.path] }) }),
+);

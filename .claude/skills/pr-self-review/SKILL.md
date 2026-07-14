@@ -60,24 +60,16 @@ file when needed) to ground each finding.
 
 ## Step 2 — Classify each changed path
 
-Drop generated / vendored / non-review paths first:
-`**/migrations/**`, `*/vendor/shared/**` (review the **source of truth** under
-`server/src/vendor/shared/` only, never the `client/` copy), lockfiles, and
-non-code assets.
-
-Then bucket the rest:
-
-| Group | Matches | Skills to apply |
-|---|---|---|
-| **UI** | `client/src/**/*.{ts,tsx}` (not `*.test.tsx`) | frontend-architecture, react-best-practices, next-best-practices, typescript-expert, security, zod |
-| **UI tests** | `client/src/**/*.test.tsx`, `client/src/test/**` | + react-testing-library |
-| **Backend** | `server/src/**/*.ts` | onion-architecture, fastify-best-practices, typescript-expert, security, zod |
-| **DB schema** | `server/src/db/schema/**/*.ts`, repository adapters | + drizzle-orm-patterns, postgresql-table-design |
-| **Pure engine** | `reviewer-core/src/**/*.ts` | onion-architecture (purity / inward-dependency rule), typescript-expert, security, zod |
-| **Shared contracts** | `server/src/vendor/shared/**/*.ts` | zod, typescript-expert |
+Classify every changed path and load the mapped skills using the **`skill-routing`**
+skill — the single source of truth for the path→skill mapping, shared with the
+`implementation-planner`, `implementer`, `test-writer`, and the reviewer agents. It
+also defines the drop list (`**/migrations/**`, `*/vendor/shared/**` — review the
+source of truth under `server/src/vendor/shared/` only, never the `client/` copy,
+lockfiles, non-code assets). Load it by name; **do not reproduce the table here.**
 
 `security`, `zod` and `typescript-expert` are cross-cutting — apply them to every
-code group. `mermaid-diagram` is **not** a review skill and is never used here.
+code group. `mermaid-diagram` and `spec-authoring` are **not** review skills and are
+never used here.
 
 ## Step 3 — Review each non-empty group
 

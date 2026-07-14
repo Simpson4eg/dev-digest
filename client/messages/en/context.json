@@ -1,4 +1,15 @@
 {
+  "docs": {
+    "crumb": "Project Context",
+    "title": "Project Context",
+    "subtitle": "Markdown files discovered under specs/, docs/, and insights/ in the cloned repo. Attach them to agents or skills as steering context for reviews.",
+    "docCount": "{count, plural, one {# document} other {# documents}} discovered",
+    "loadError": "Could not load project context documents.",
+    "empty": {
+      "title": "No context documents found",
+      "body": "Add markdown files under a specs/, docs/, or insights/ folder in your repository. They will appear here and can be attached to agents and skills."
+    }
+  },
   "title": "Project Context",
   "chunks": "{count} chunks",
   "reindex": "Re-index",

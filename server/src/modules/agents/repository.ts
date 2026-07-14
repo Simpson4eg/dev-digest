@@ -48,6 +48,12 @@ export interface LinkedSkillRow {
   order: number;
 }
 
+/** A context-doc path attached to an agent (with its order), from agent_context_docs. */
+export interface LinkedContextDocRow {
+  path: string;
+  order: number;
+}
+
 export class AgentsRepository {
   constructor(private db: Db) {}
 
@@ -258,5 +264,39 @@ export class AgentsRepository {
       .returning();
     if (row) await this.snapshotVersion(row, nextVersion);
     return row;
+  }
+
+  // ---- agent_context_docs link table (Task 2 — attachment persistence) ----
+
+  /**
+   * Context-doc paths attached to an agent, in `order` ascending.
+   *
+   * Tenant safety: joins through `agents.workspace_id` (mirrors `linkedSkills`
+   * at repository.ts:199 which joins through `skills.workspace_id`). The join
+   * table itself has no `workspace_id`, so this WHERE clause is the fence.
+   */
+  async linkedContextDocs(workspaceId: string, agentId: string): Promise<LinkedContextDocRow[]> {
+    const rows = await this.db
+      .select({ path: t.agentContextDocs.path, order: t.agentContextDocs.order })
+      .from(t.agentContextDocs)
+      .innerJoin(t.agents, eq(t.agentContextDocs.agentId, t.agents.id))
+      .where(and(eq(t.agentContextDocs.agentId, agentId), eq(t.agents.workspaceId, workspaceId)))
+      .orderBy(asc(t.agentContextDocs.order));
+    return rows;
+  }
+
+  /**
+   * Replace the full ordered set of context-doc paths for an agent.
+   * Order = array index. Paths not in the list are detached (AC-7).
+   * Mirrors `setSkills` at repository.ts:239.
+   */
+  async setContextDocs(agentId: string, paths: string[]): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(t.agentContextDocs).where(eq(t.agentContextDocs.agentId, agentId));
+      if (paths.length === 0) return;
+      await tx
+        .insert(t.agentContextDocs)
+        .values(paths.map((path, i) => ({ agentId, path, order: i })));
+    });
   }
 }

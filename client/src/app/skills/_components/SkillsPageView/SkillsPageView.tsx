@@ -6,12 +6,13 @@ import { AppShell } from "@/components/app-shell";
 import { useSkills, useUpdateSkill } from "@/lib/hooks/skills";
 import { ImportSkillDrawer } from "./ImportSkillDrawer";
 import { SkillConfigPanel } from "./SkillConfigPanel";
+import { SkillContextDocsPanel } from "./SkillContextDocsPanel";
 import { SkillEditor } from "./SkillEditor";
 import { SkillStatsPanel } from "./SkillStatsPanel";
 import { SkillVersionsPanel } from "./SkillVersionsPanel";
 import { s } from "./styles";
 
-type SkillTab = "config" | "preview" | "stats" | "versions";
+type SkillTab = "config" | "preview" | "stats" | "versions" | "context";
 
 export function SkillsPageView() {
   const skillsQuery = useSkills();
@@ -105,6 +106,7 @@ export function SkillsPageView() {
                 tabs={[
                   { key: "config", label: "Config" },
                   { key: "preview", label: "Preview" },
+                  { key: "context", label: "Context" },
                   { key: "stats", label: "Stats" },
                   { key: "versions", label: "Versions" },
                 ]}
@@ -119,6 +121,7 @@ export function SkillsPageView() {
                     <div style={s.markdown}><Markdown>{selected.body}</Markdown></div>
                   </div>
                 )}
+                {tab === "context" && <SkillContextDocsPanel skill={selected} />}
                 {tab === "versions" && <SkillVersionsPanel skill={selected} />}
                 {tab === "stats" && <SkillStatsPanel skill={selected} />}
               </div>

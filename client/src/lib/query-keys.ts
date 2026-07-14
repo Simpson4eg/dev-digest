@@ -53,10 +53,24 @@ export const qk = {
   smartDiff: (prId: string | null | undefined) => ["smart-diff", prId] as const,
   /** Blast Radius: changed symbols → downstream callers → impacted endpoints. */
   prBlastRadius: (prId: string | null | undefined) => ["pr-blast-radius", prId] as const,
+  /** Why + Risk Brief: LLM-composed brief per PR (one call fresh, zero on cache hit). */
+  prBrief: (prId: string | null | undefined) => ["pr-brief", prId] as const,
 
   // ---- run trace ----
   runTrace: (runId: string | null | undefined) => ["run-trace", runId] as const,
 
   // ---- conventions ----
   conventions: (repoId: string | null | undefined) => ["conventions", repoId] as const,
+
+  // ---- project-context docs (discovery reader, Task 3/6) ----
+  /** Discovered .md docs under specs/docs/insights for a repo. */
+  contextDocs: (repoId: string | null | undefined) => ["context-docs", repoId] as const,
+
+  // ---- agent context-docs attachment (Task 7) ----
+  /** Attached context-doc paths for one agent (ordered list). */
+  agentContextDocs: (agentId: string | null | undefined) => ["agent-context-docs", agentId] as const,
+
+  // ---- skill context-docs attachment (Task 8) ----
+  /** Attached context-doc paths for one skill (ordered list). */
+  skillContextDocs: (skillId: string | null | undefined) => ["skill-context-docs", skillId] as const,
 };

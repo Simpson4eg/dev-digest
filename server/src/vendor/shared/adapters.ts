@@ -227,6 +227,16 @@ export interface GitClient {
   blame(repo: RepoRef, path: string): Promise<BlameLine[]>;
   log(repo: RepoRef, path?: string): Promise<GitCommit[]>;
   readFile(repo: RepoRef, path: string): Promise<string>;
+  /**
+   * Discover files in the cloned repo whose paths match any of the given glob
+   * patterns. Returns repo-relative paths (forward-slash separated). Each
+   * returned path is containment-checked (must resolve strictly inside the
+   * clone directory) and symlink-to-outside-tree paths are excluded.
+   *
+   * Empty repo or no matching files → returns []. Never throws for a missing
+   * repo directory (returns []).
+   */
+  listFiles(repo: RepoRef, globs: string[]): Promise<string[]>;
   clonePathFor(repo: RepoRef): string;
 }
 

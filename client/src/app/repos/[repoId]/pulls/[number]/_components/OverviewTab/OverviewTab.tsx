@@ -4,6 +4,7 @@ import React from "react";
 import { SectionLabel } from "@devdigest/ui";
 import { IntentPanel } from "./IntentPanel";
 import { BlastRadiusPanel } from "./BlastRadiusPanel";
+import { PrBriefCard } from "./PrBriefCard";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -17,6 +18,8 @@ export function OverviewTab({ prBody, prId, repoFullName, headSha }: OverviewTab
   return (
     <>
       <IntentPanel prId={prId} />
+
+      <PrBriefCard prId={prId} repoFullName={repoFullName} headSha={headSha} />
 
       <BlastRadiusPanel prId={prId} repoFullName={repoFullName} headSha={headSha} />
 

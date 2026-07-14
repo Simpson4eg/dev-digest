@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { qk } from "../query-keys";
-import type { Agent, AgentSkillLink, AgentVersion, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
+import type { Agent, AgentContextDocsResponse, AgentContextDocsSetRequest, AgentSkillLink, AgentVersion, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
 
 export function useAgents() {
   return useQuery({
@@ -122,5 +122,42 @@ export function useProviderModels(provider: Provider | null | undefined) {
     queryFn: () => api.get<ModelInfo[]>(`/providers/${provider}/models`),
     enabled: !!provider,
     staleTime: 5 * 60_000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Agent context-docs attachment (Task 7 — AC-4, AC-6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the ordered list of context-doc paths currently attached to an agent.
+ * Returns { paths: [] } when none are attached (never an error).
+ */
+export function useAgentContextDocs(agentId: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.agentContextDocs(agentId),
+    queryFn: () => api.get<AgentContextDocsResponse>(`/agents/${agentId}/context-docs`),
+    enabled: !!agentId,
+  });
+}
+
+/**
+ * Full-replace the agent's ordered attachment list (PUT /agents/:id/context-docs).
+ * Mirrors the setSkills pattern: supply the full ordered array; the server persists
+ * and returns the new list. Invalidates the agentContextDocs key on success.
+ */
+export function useSetAgentContextDocs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, paths }: { id: string; paths: string[] }) => {
+      const body: AgentContextDocsSetRequest = { paths };
+      return api.put<AgentContextDocsResponse>(`/agents/${id}/context-docs`, body);
+    },
+    onSuccess: (data, { id }) => {
+      qc.setQueryData(qk.agentContextDocs(id), data);
+    },
+    onError: (_err, { id }) => {
+      void qc.invalidateQueries({ queryKey: qk.agentContextDocs(id) });
+    },
   });
 }

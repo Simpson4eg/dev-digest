@@ -11,6 +11,8 @@ vi.mock("../../../../../lib/hooks/agents", () => ({
   useProviderModels: () => ({ data: [{ id: "gpt-4.1", provider: "openai" }] }),
   useAgentSkills: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useSetAgentSkills: () => ({ mutate: vi.fn(), isPending: false }),
+  useAgentContextDocs: () => ({ data: { paths: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useSetAgentContextDocs: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../../../../../lib/hooks/skills", () => ({
@@ -20,6 +22,14 @@ vi.mock("../../../../../lib/hooks/skills", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
+}));
+
+vi.mock("../../../../../lib/hooks/project-context", () => ({
+  useContextDocs: () => ({ data: { docs: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
+}));
+
+vi.mock("../../../../../lib/providers/repo-context", () => ({
+  useActiveRepo: () => ({ repoId: "repo1" }),
 }));
 
 import { AgentEditor } from "./AgentEditor";

@@ -43,6 +43,13 @@ export const PromptAssembly = z.object({
   skill_tokens: z.number().int().nonnegative().nullish(),
   memory: z.string().nullish(),
   specs: z.string().nullish(),
+  /**
+   * Per-injected-document token sizes (AC-15). Maps each repo-relative path
+   * that was actually read and injected to its token count, as measured by
+   * the server tokenizer. Null/absent when no documents were injected.
+   * Modelled on `skill_tokens`; filled by run-executor alongside `specs_read`.
+   */
+  specs_tokens: z.record(z.string(), z.number().int().nonnegative()).nullish(),
   /** Callers-of-changed-symbols digest (T1.3); null when absent. */
   callers: z.string().nullish(),
   /** Repo skeleton / map (T3); null when absent. Enables per-slot token

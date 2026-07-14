@@ -97,5 +97,17 @@
     "bodyLabel": "Skill body (Markdown)",
     "bodyHint": "Saving a changed body creates a new immutable version.",
     "version": "v{version}"
+  },
+  "context": {
+    "title": "Project context to use",
+    "filterPlaceholder": "Filter docs…",
+    "attachedCount": "{attached} of {total} attached",
+    "orderHint": "Attach markdown docs from the repo. Every agent using this skill will inherit these docs and inject them into the review prompt.",
+    "noRepoSelected": "No repository selected. Select an active repo to browse available context documents.",
+    "loadError": "Could not load context documents.",
+    "empty": {
+      "title": "No context documents found",
+      "body": "Add markdown files under specs/, docs/, or insights/ in your repository. They will appear here and can be attached."
+    }
   }
 }

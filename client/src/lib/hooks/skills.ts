@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Skill, SkillImportPreview, SkillSource, SkillStats, SkillType, SkillVersion } from "@devdigest/shared";
+import type { Skill, SkillContextDocsResponse, SkillContextDocsSetRequest, SkillImportPreview, SkillSource, SkillStats, SkillType, SkillVersion } from "@devdigest/shared";
 import { api } from "../api";
 import { qk } from "../query-keys";
 
@@ -84,5 +84,43 @@ export function useSkillImportPreview() {
   return useMutation({
     mutationFn: (input: { filename: string; content_base64: string }) =>
       api.post<SkillImportPreview>("/skills/import/preview", input),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Skill context-docs attachment (Task 8 — AC-5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the ordered list of context-doc paths currently attached to a skill.
+ * Returns { paths: [] } when none are attached (never an error).
+ */
+export function useSkillContextDocs(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.skillContextDocs(skillId),
+    queryFn: () => api.get<SkillContextDocsResponse>(`/skills/${skillId}/context-docs`),
+    enabled: !!skillId,
+  });
+}
+
+/**
+ * Full-replace the skill's ordered attachment list (PUT /skills/:id/context-docs).
+ * Mirrors the agent-side useSetAgentContextDocs pattern: supply the full ordered
+ * array; the server persists and returns the new list. Invalidates the
+ * skillContextDocs key on success (client INSIGHTS 2026-06-29).
+ */
+export function useSetSkillContextDocs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, paths }: { id: string; paths: string[] }) => {
+      const body: SkillContextDocsSetRequest = { paths };
+      return api.put<SkillContextDocsResponse>(`/skills/${id}/context-docs`, body);
+    },
+    onSuccess: (data, { id }) => {
+      qc.setQueryData(qk.skillContextDocs(id), data);
+    },
+    onError: (_err, { id }) => {
+      void qc.invalidateQueries({ queryKey: qk.skillContextDocs(id) });
+    },
   });
 }
