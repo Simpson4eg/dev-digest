@@ -19,6 +19,8 @@ import {
   useCompareRuns,
   usePromoteVersion,
 } from "@/lib/hooks/evals";
+import { useAgents } from "@/lib/hooks/agents";
+import { AppShell } from "@/components/app-shell";
 import { s } from "./styles";
 
 // ---------------------------------------------------------------------------
@@ -328,9 +330,11 @@ function CompareModal({ agentId, agentName, runGroups, onClose }: CompareModalPr
 
 interface AgentCardProps {
   dashboard: EvalDashboard;
+  /** Human agent name resolved from owner_id (falls back to the id). */
+  name?: string;
 }
 
-function AgentCard({ dashboard }: AgentCardProps) {
+function AgentCard({ dashboard, name }: AgentCardProps) {
   const [showCompare, setShowCompare] = React.useState(false);
 
   // Real run-group list (newest-first) for the Compare selector — actual group
@@ -339,7 +343,7 @@ function AgentCard({ dashboard }: AgentCardProps) {
   const runGroupsQuery = useEvalRunGroups(dashboard.owner_id);
   const runGroups: EvalRunGroup[] = runGroupsQuery.data ?? [];
 
-  const agentName = dashboard.owner_id ?? "Unknown agent";
+  const agentName = name ?? dashboard.owner_id ?? "Unknown agent";
   const current = dashboard.current;
   const delta = dashboard.delta;
   const recentRuns = dashboard.recent_runs ?? [];
@@ -441,19 +445,36 @@ function AgentCard({ dashboard }: AgentCardProps) {
 export function EvalDashboardView() {
   const dashboard = useEvalDashboard();
   const runAll = useRunAllAgents();
+  const { data: agentList } = useAgents();
 
-  if (dashboard.isLoading) return <Skeleton height={300} />;
+  const crumb = [{ label: "Skills Lab" }, { label: "Eval Dashboard" }];
+
+  // Resolve agent owner_id → human name for the card headers.
+  const nameById = React.useMemo(
+    () => new Map((agentList ?? []).map((a) => [a.id, a.name])),
+    [agentList],
+  );
+
+  if (dashboard.isLoading)
+    return (
+      <AppShell crumb={crumb}>
+        <Skeleton height={300} />
+      </AppShell>
+    );
   if (dashboard.isError)
     return (
-      <ErrorState
-        body="Could not load eval dashboard."
-        onRetry={() => void dashboard.refetch()}
-      />
+      <AppShell crumb={crumb}>
+        <ErrorState
+          body="Could not load eval dashboard."
+          onRetry={() => void dashboard.refetch()}
+        />
+      </AppShell>
     );
 
   const agents = dashboard.data ?? [];
 
   return (
+    <AppShell crumb={crumb}>
     <div style={s.page}>
       <div style={s.header}>
         <h1 style={s.h1}>Eval Dashboard</h1>
@@ -484,10 +505,15 @@ export function EvalDashboardView() {
       ) : (
         <div style={s.cardList}>
           {agents.map((agent) => (
-            <AgentCard key={agent.owner_id ?? "unknown"} dashboard={agent} />
+            <AgentCard
+              key={agent.owner_id ?? "unknown"}
+              dashboard={agent}
+              name={agent.owner_id ? nameById.get(agent.owner_id) : undefined}
+            />
           ))}
         </div>
       )}
     </div>
+    </AppShell>
   );
 }

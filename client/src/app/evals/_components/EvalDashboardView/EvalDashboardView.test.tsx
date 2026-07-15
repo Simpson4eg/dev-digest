@@ -36,6 +36,13 @@ vi.mock("@/lib/hooks/evals", () => ({
   usePromoteVersion: () => usePromoteVersionMock(),
 }));
 
+// AppShell pulls in router/nav/repo-context chrome — passthrough it in tests so
+// the view renders in isolation. useAgents (name resolution) → empty list.
+vi.mock("@/components/app-shell", () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock("@/lib/hooks/agents", () => ({ useAgents: () => ({ data: [] }) }));
+
 import { EvalDashboardView } from "./EvalDashboardView";
 
 // ---------------------------------------------------------------------------

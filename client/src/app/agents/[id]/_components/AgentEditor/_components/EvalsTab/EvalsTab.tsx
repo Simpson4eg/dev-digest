@@ -13,7 +13,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Button, EmptyState, ErrorState, Icon, Modal, Skeleton } from "@devdigest/ui";
 import type { Agent, EvalCase, EvalRunGroupResult, EvalRunResult } from "@devdigest/shared";
-import { useEvalCases, useDeleteEvalCase, useRunAgentEvals, useCreateEvalCaseManual } from "@/lib/hooks/evals";
+import { useEvalCases, useDeleteEvalCase, useRunAgentEvals, useCreateEvalCaseManual, useRunHistory } from "@/lib/hooks/evals";
 import { s } from "./styles";
 
 // ---------------------------------------------------------------------------
@@ -36,6 +36,23 @@ function NeverRunBadge() {
     <span style={s.neverRun} aria-label={t("neverRun")}>
       <Icon.Clock size={12} aria-hidden="true" />
       {t("neverRun")}
+    </span>
+  );
+}
+
+/** Read the discriminated `expected_output.type`; null when absent/malformed. */
+function evalCaseMustFind(evalCase: EvalCase): boolean | null {
+  const eo = evalCase.expected_output;
+  if (!eo || typeof eo !== "object" || !("type" in eo)) return null;
+  const type = (eo as { type?: unknown }).type;
+  return type === "must_find" ? true : type === "must_not_flag" ? false : null;
+}
+
+/** Expectation-type badge — green `must_find` / red `must_not_flag` (+ text). */
+function TypeBadge({ mustFind }: { mustFind: boolean }) {
+  return (
+    <span style={s.typeBadge(mustFind)} aria-label={mustFind ? "expects must_find" : "expects must_not_flag"}>
+      {mustFind ? "must_find" : "must_not_flag"}
     </span>
   );
 }
@@ -245,6 +262,51 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
 }
 
 // ---------------------------------------------------------------------------
+// View eval case modal — read-only: expectation type + frozen input + expected JSON
+// ---------------------------------------------------------------------------
+
+function ViewCaseModal({ evalCase, onClose }: { evalCase: EvalCase; onClose: () => void }) {
+  const eo = evalCase.expected_output;
+  const type =
+    eo && typeof eo === "object" && "type" in eo
+      ? String((eo as { type?: unknown }).type)
+      : "unknown";
+
+  return (
+    <Modal
+      width={740}
+      title={evalCase.name}
+      subtitle="Read-only view of this case's frozen input and expected output."
+      onClose={onClose}
+      footer={
+        <div style={s.modalFooter}>
+          <Button kind="ghost" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      }
+    >
+      <div style={s.modalBody}>
+        <div>
+          <div style={s.modalLabel}>Expectation type</div>
+          <div style={{ fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>{type}</div>
+        </div>
+
+        <div>
+          <div style={s.modalLabel}>Input diff (frozen)</div>
+          <textarea readOnly value={evalCase.input_diff || "(no diff stored)"} rows={10} style={s.modalTextarea} />
+        </div>
+
+        <div>
+          <div style={s.modalLabel}>Expected output (JSON)</div>
+          <textarea readOnly value={JSON.stringify(eo, null, 2)} rows={12} style={s.modalTextarea} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // EvalsTab — main component
 // ---------------------------------------------------------------------------
 
@@ -255,13 +317,25 @@ export function EvalsTab({ agent }: { agent: Agent }) {
   const runMut = useRunAgentEvals();
 
   const [showNewModal, setShowNewModal] = React.useState(false);
-  // Per-case pass/fail from the latest in-session run result.
+  const [viewCase, setViewCase] = React.useState<EvalCase | null>(null);
+  // Per-case pass/fail from the run just triggered in this session (immediate).
   const [lastRunResults, setLastRunResults] = React.useState<EvalRunResult[] | null>(null);
+  // Persisted latest-run results (survives refresh); refetched after a run via
+  // the shared qk.evalRunGroups invalidation in useRunAgentEvals.
+  const history = useRunHistory(agent.id);
 
   const passMap = React.useMemo(() => {
-    if (!lastRunResults) return new Map<string, boolean>();
-    return new Map(lastRunResults.map((r) => [r.case_id, r.result.per_trace?.[0]?.pass ?? false]));
-  }, [lastRunResults]);
+    const m = new Map<string, boolean>();
+    // Persisted: the latest run group's per-case rows.
+    for (const r of history.data?.recent_runs ?? []) {
+      if (r.pass != null) m.set(r.case_id, r.pass);
+    }
+    // In-session run overrides (lands before the refetch completes).
+    if (lastRunResults) {
+      for (const r of lastRunResults) m.set(r.case_id, r.result.per_trace?.[0]?.pass ?? false);
+    }
+    return m;
+  }, [history.data, lastRunResults]);
 
   const handleRunAll = () => {
     runMut.mutate(
@@ -307,7 +381,6 @@ export function EvalsTab({ agent }: { agent: Agent }) {
           <Button
             kind="primary"
             icon="Plus"
-            style={{ marginLeft: 8 }}
             onClick={() => setShowNewModal(true)}
           >
             {t("newCase")}
@@ -330,24 +403,26 @@ export function EvalsTab({ agent }: { agent: Agent }) {
       ) : (
         <div style={s.list}>
           {caseList.map((evalCase) => {
-            const hasResult = lastRunResults !== null;
             const pass = passMap.get(evalCase.id);
+            const mustFind = evalCaseMustFind(evalCase);
 
             return (
-              <div key={evalCase.id} style={s.row}>
-                <div style={s.text}>
+              <div key={evalCase.id} style={{ ...s.row, ...s.rowAccent(mustFind) }}>
+                <button
+                  type="button"
+                  aria-label={`View ${evalCase.name}`}
+                  onClick={() => setViewCase(evalCase)}
+                  style={{ ...s.text, background: "none", border: "none", textAlign: "left", cursor: "pointer", padding: 0 }}
+                >
                   <div style={s.name}>{evalCase.name}</div>
                   {evalCase.notes && <div style={s.meta}>{evalCase.notes}</div>}
-                </div>
+                </button>
+
+                {/* Expectation-type badge (green must_find / red must_not_flag) */}
+                {mustFind !== null && <TypeBadge mustFind={mustFind} />}
 
                 {/* Pass/Fail — text + icon, NOT color alone (a11y AC) */}
-                {!hasResult ? (
-                  <NeverRunBadge />
-                ) : pass !== undefined ? (
-                  <PassFailBadge pass={pass} />
-                ) : (
-                  <NeverRunBadge />
-                )}
+                {pass !== undefined ? <PassFailBadge pass={pass} /> : <NeverRunBadge />}
 
                 <div style={s.controls}>
                   <button
@@ -372,6 +447,8 @@ export function EvalsTab({ agent }: { agent: Agent }) {
           onCreated={() => void cases.refetch()}
         />
       )}
+
+      {viewCase && <ViewCaseModal evalCase={viewCase} onClose={() => setViewCase(null)} />}
     </div>
   );
 }

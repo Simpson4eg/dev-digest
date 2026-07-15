@@ -152,8 +152,11 @@ export function useRunAgentEvals() {
   const qc = useQueryClient();
 
   return useMutation({
+    // Always send an object body: the route validates `body` against a Zod
+    // object, so a body-less POST is parsed as null and rejected with 422.
+    // `{ label }` serializes to `{}` when label is undefined (JSON drops it).
     mutationFn: ({ agentId, label }: { agentId: string; label?: string }) =>
-      api.post<EvalRunGroupResult>(`/agents/${agentId}/eval-runs`, label ? { label } : undefined),
+      api.post<EvalRunGroupResult>(`/agents/${agentId}/eval-runs`, { label }),
     onSuccess: (_data, { agentId }) => {
       notify.success("Eval run complete");
       void qc.invalidateQueries({ queryKey: qk.evalRunGroups(agentId) });

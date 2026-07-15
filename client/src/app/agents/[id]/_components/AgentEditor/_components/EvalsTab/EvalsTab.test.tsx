@@ -67,12 +67,14 @@ const useEvalCasesMock = vi.fn();
 const useRunAgentEvalsMock = vi.fn();
 const useDeleteEvalCaseMock = vi.fn();
 const useCreateEvalCaseManualMock = vi.fn();
+const useRunHistoryMock = vi.fn();
 
 vi.mock("@/lib/hooks/evals", () => ({
   useEvalCases: (id: unknown) => useEvalCasesMock(id),
   useRunAgentEvals: () => useRunAgentEvalsMock(),
   useDeleteEvalCase: () => useDeleteEvalCaseMock(),
   useCreateEvalCaseManual: () => useCreateEvalCaseManualMock(),
+  useRunHistory: (id: unknown) => useRunHistoryMock(id),
 }));
 
 import { EvalsTab } from "./EvalsTab";
@@ -121,6 +123,12 @@ function setupDefaultMocks(overrides?: {
   useCreateEvalCaseManualMock.mockReturnValue({
     mutate: mockCreateManualMutate,
     isPending: false,
+  });
+
+  useRunHistoryMock.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
   });
 }
 

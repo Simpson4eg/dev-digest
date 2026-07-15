@@ -40,8 +40,10 @@ import {
   EvalRunGroup,
   EvalDashboard,
   EvalCompareResult,
+  EvalCase,
   AgentVersion,
 } from '@devdigest/shared';
+import type { EvalCaseRow } from './eval-repository.js';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -110,6 +112,27 @@ const EvalRunBody = z.object({
   label: z.string().optional(),
 });
 
+/**
+ * Map a raw `eval_cases` row (camelCase, Drizzle) to the snake_case `EvalCase`
+ * contract the client consumes. The service's `listCases` keeps returning raw
+ * rows (internal run/count callers rely on the camelCase shape); only the GET
+ * response is mapped + schema-validated, so the client gets correctly-cased,
+ * typed fields (input_diff / expected_output / …) instead of raw column names.
+ */
+function rowToEvalCase(row: EvalCaseRow): EvalCase {
+  return {
+    id: row.id,
+    owner_kind: row.ownerKind,
+    owner_id: row.ownerId,
+    name: row.name,
+    input_diff: row.inputDiff ?? '',
+    input_files: row.inputFiles ?? null,
+    input_meta: row.inputMeta ?? null,
+    expected_output: row.expectedOutput ?? null,
+    notes: row.notes ?? null,
+  };
+}
+
 export default async function evalRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
 
@@ -163,10 +186,11 @@ export default async function evalRoutes(appBase: FastifyInstance) {
 
   app.get(
     '/agents/:id/eval-cases',
-    { schema: { params: IdParams } },
+    { schema: { params: IdParams, response: { 200: z.array(EvalCase) } } },
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
-      return svc.listCases(workspaceId, req.params.id);
+      const rows = await svc.listCases(workspaceId, req.params.id);
+      return rows.map(rowToEvalCase);
     },
   );
 

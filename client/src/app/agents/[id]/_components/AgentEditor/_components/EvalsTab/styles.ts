@@ -6,7 +6,7 @@ export const s = {
   header: { display: "flex", alignItems: "center", gap: 14, marginBottom: 8 } satisfies React.CSSProperties,
   h2: { margin: 0, fontSize: 16 } satisfies React.CSSProperties,
   count: { color: "var(--text-muted)", fontSize: 12 } satisfies React.CSSProperties,
-  runBtn: { marginLeft: "auto" } satisfies React.CSSProperties,
+  runBtn: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 } satisfies React.CSSProperties,
   hint: { color: "var(--text-muted)", fontSize: 12, margin: "0 0 18px" } satisfies React.CSSProperties,
   list: { display: "flex", flexDirection: "column", gap: 7 } satisfies React.CSSProperties,
   row: { display: "flex", alignItems: "center", gap: 11, minHeight: 46, padding: "8px 11px", border: "1px solid var(--border)", borderRadius: 7, background: "var(--bg-elevated)" } satisfies React.CSSProperties,
@@ -25,6 +25,23 @@ export const s = {
     padding: "2px 7px",
   } satisfies React.CSSProperties),
   neverRun: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" } satisfies React.CSSProperties,
+  // Expectation-type badge — green for must_find, red for must_not_flag. Text
+  // label carries the meaning so it's not color-only (a11y, SPEC-03 Non-functional).
+  typeBadge: (mustFind: boolean) => ({
+    display: "inline-flex",
+    alignItems: "center",
+    fontSize: 11,
+    fontWeight: 700,
+    fontFamily: "monospace",
+    color: mustFind ? "var(--ok)" : "var(--crit)",
+    background: mustFind ? "var(--ok-bg, #e8f7ee)" : "var(--crit-bg, #fde8e8)",
+    borderRadius: 4,
+    padding: "2px 7px",
+    flexShrink: 0,
+  } satisfies React.CSSProperties),
+  // Colored left accent on the row echoing the type (null = unknown → no accent).
+  rowAccent: (mustFind: boolean | null): React.CSSProperties =>
+    mustFind === null ? {} : { borderLeft: `3px solid ${mustFind ? "var(--ok)" : "var(--crit)"}` },
   controls: { display: "flex", gap: 6, flexShrink: 0 } satisfies React.CSSProperties,
   deleteBtn: { border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", padding: 4, display: "flex" } satisfies React.CSSProperties,
   // Modal styles
