@@ -146,8 +146,16 @@ export class EvalService {
           // so we join the raw patches rather than going through diffFromPrFiles
           // (which returns a parsed UnifiedDiff object).
           const prFiles = await this.reviewsRepo.getPrFiles(pullRequestId);
+          // Slice to the finding's OWN file rather than freezing the whole PR
+          // diff (perf: a whole-PR diff turns each eval run into a multi-pass
+          // LLM job of tens of minutes per case; a single-file diff reviews in
+          // seconds). `finding.file` is always among the PR's changed files, so
+          // the match normally holds; fall back to the full PR diff only if the
+          // file isn't present (defensive — never store an empty diff here).
+          const relevant = prFiles.filter((f) => f.path === finding.file);
+          const selected = relevant.length > 0 ? relevant : prFiles;
           const parts: string[] = [];
-          for (const f of prFiles) {
+          for (const f of selected) {
             if (!f.patch) continue;
             parts.push(`diff --git a/${f.path} b/${f.path}`);
             parts.push(`--- a/${f.path}`);

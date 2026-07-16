@@ -345,4 +345,66 @@ d('EvalService — integration (case CRUD via service)', () => {
     // The stored diff must be the explicitly passed one.
     expect(row.inputDiff).toBe(explicitDiff);
   });
+
+  it('A-gap: one-click case slices the PR diff to the finding\'s file only (perf — not the whole PR)', async () => {
+    // A PR with several changed files. The frozen case must contain ONLY the
+    // finding's file, so a run reviews one small diff instead of the whole PR
+    // (which turns each eval run into a multi-pass, multi-minute LLM job).
+    const [repo] = await pg.handle.db
+      .insert(t.repos)
+      .values({
+        workspaceId,
+        owner: 'eval-test',
+        name: 'eval-repo-slice',
+        fullName: 'eval-test/eval-repo-slice',
+        defaultBranch: 'main',
+        clonePath: null,
+        createdBy: null,
+      })
+      .returning();
+
+    const [pr] = await pg.handle.db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId: repo!.id,
+        number: 9002,
+        title: 'Multi-file PR',
+        author: 'bot',
+        branch: 'feat/multi',
+        base: 'main',
+        headSha: 'cafebabe',
+        additions: 30,
+        deletions: 0,
+        filesCount: 3,
+        status: 'needs_review',
+      })
+      .returning();
+    const prId = pr!.id;
+
+    await pg.handle.db.insert(t.prFiles).values([
+      { prId, path: 'src/target.ts', additions: 2, deletions: 0, patch: '@@ -1,0 +1,2 @@\n+const wanted = 1;' },
+      { prId, path: 'src/other-a.ts', additions: 1, deletions: 0, patch: '@@ -1,0 +1,1 @@\n+const NOISE_A = 2;' },
+      { prId, path: 'src/other-b.ts', additions: 1, deletions: 0, patch: '@@ -1,0 +1,1 @@\n+const NOISE_B = 3;' },
+    ]);
+
+    const finding = makeFinding({ file: 'src/target.ts', start_line: 1, end_line: 2 });
+
+    const row = await svc.createCaseFromFinding(
+      workspaceId,
+      agentId,
+      finding,
+      'accept',
+      undefined,
+      undefined,
+      prId,
+    );
+
+    // Only the finding's file is frozen — the other files are excluded.
+    expect(row.inputDiff).toContain('src/target.ts');
+    expect(row.inputDiff).not.toContain('src/other-a.ts');
+    expect(row.inputDiff).not.toContain('src/other-b.ts');
+    // Exactly one `diff --git` header (one file).
+    expect(row.inputDiff!.match(/diff --git/g)?.length).toBe(1);
+  });
 });

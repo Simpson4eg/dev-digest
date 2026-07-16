@@ -382,13 +382,23 @@ export class EvalRepository {
       const latest = groups[0];
       const previous = groups[1];
 
+      // Recent runs = per-case rows of the latest group. Loaded BEFORE
+      // currentMetrics so traces_passed / traces_total are derived from the
+      // real rows (parity with runHistory) instead of hardcoded 0.
+      let recentRuns: EvalRunRecord[] = [];
+      if (latest) {
+        recentRuns = await this.runRowsForGroup(latest.id);
+      }
+      const tracesTotal = recentRuns.length;
+      const tracesPassed = recentRuns.filter((r) => r.pass === true).length;
+
       const currentMetrics = latest
         ? {
             recall: latest.recall ?? 0,
             precision: latest.precision ?? 0,
             citation_accuracy: latest.citationAccuracy ?? 0,
-            traces_passed: 0, // Enriched per run rows — kept as 0 here (best-effort).
-            traces_total: 0,
+            traces_passed: tracesPassed,
+            traces_total: tracesTotal,
             cost_usd: latest.totalCostUsd ?? null,
           }
         : {
@@ -409,12 +419,6 @@ export class EvalRepository {
             ? (latest.citationAccuracy ?? 0) - (previous.citationAccuracy ?? 0)
             : 0,
       };
-
-      // Recent runs = per-case rows of the latest group.
-      let recentRuns: EvalRunRecord[] = [];
-      if (latest) {
-        recentRuns = await this.runRowsForGroup(latest.id);
-      }
 
       results.push({
         owner_kind: ownerKind as 'skill' | 'agent',

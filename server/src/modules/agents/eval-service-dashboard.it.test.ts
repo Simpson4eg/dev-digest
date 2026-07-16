@@ -438,6 +438,13 @@ d('EvalService — T7 dashboard / compare / promote (integration)', () => {
     expect(ownerIds).toContain(agentA.id);
     expect(ownerIds).toContain(agentB.id);
 
+    // Regression: current.traces_passed / traces_total are derived from the
+    // latest group's per-case rows, NOT hardcoded 0/0 (the dashboard column bug).
+    // agentA ran one case, and the mock review matches its must_find expectation.
+    const entryA = dashboards.find((d) => d.owner_id === agentA.id)!;
+    expect(entryA.current.traces_total).toBe(1);
+    expect(entryA.current.traces_passed).toBe(1);
+
     for (const entry of dashboards) {
       // Each entry has required fields.
       expect(typeof entry.cases_total).toBe('number');
