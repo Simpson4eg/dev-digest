@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Verdict, Finding } from './findings.js';
-import { EvalRun, EvalOwnerKind, Conformance } from './knowledge.js';
+import { EvalRun, EvalOwnerKind, Conformance, Provider, CiFailOn } from './knowledge.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -29,6 +29,30 @@ export const EvalCaseInput = z.object({
 });
 export type EvalCaseInput = z.infer<typeof EvalCaseInput>;
 
+/**
+ * One-click eval case body from FindingCard (T8, AC-1/2/4).
+ *
+ * The `pull_request_id` is threaded from the PR context so the server can
+ * load the stored PR diff and derive `input_diff` server-side (A gap fix).
+ * When the caller supplies `input_diff` directly it takes precedence; when
+ * omitted and `pull_request_id` is present the server loads the diff from
+ * `pr_files` (AC-6 — stored verbatim, no live re-fetch).
+ *
+ * `finding` is validated with the full `Finding` schema so the server can use
+ * the typed value directly in `createCaseFromFinding` without an unsafe cast.
+ */
+export const EvalCaseOneClickInput = z.object({
+  action: z.enum(['accept', 'dismiss']),
+  finding: Finding,
+  /** PR id (UUID) whose stored diff will be used as `input_diff` (AC-6). */
+  pull_request_id: z.string().uuid().optional(),
+  /** Explicit diff fragment; takes precedence over `pull_request_id`. */
+  input_diff: z.string().optional(),
+  /** Optional case name; server defaults to the finding title. */
+  name: z.string().optional(),
+});
+export type EvalCaseOneClickInput = z.infer<typeof EvalCaseOneClickInput>;
+
 /** A persisted eval run row (one execution of a case), returned by the API. */
 export const EvalRunRecord = z.object({
   id: z.string(),
@@ -42,6 +66,8 @@ export const EvalRunRecord = z.object({
   citation_accuracy: z.number().nullable(),
   duration_ms: z.number().int().nullable(),
   cost_usd: z.number().nullable(),
+  /** Nullable FK — rows created outside a run-group have this unset (D1). */
+  run_group_id: z.string().nullish(),
 });
 export type EvalRunRecord = z.infer<typeof EvalRunRecord>;
 
@@ -52,6 +78,96 @@ export const EvalRunResult = z.object({
   result: EvalRun,
 });
 export type EvalRunResult = z.infer<typeof EvalRunResult>;
+
+// ===========================================================================
+// Eval — expectedOutput discriminated union (D3) + run-group shapes (D1)
+// ===========================================================================
+
+/**
+ * EvalExpectedOutput — discriminated union on `type` (D3, AC-3).
+ *
+ * `must_find`     → the agent MUST emit at least one finding matching the
+ *                   expected file+range (recall stressor). `findings` is
+ *                   non-empty.
+ * `must_not_flag` → the agent MUST NOT emit a finding intersecting the
+ *                   forbidden file+range (precision stressor). `findings` is
+ *                   explicitly empty; `forbidden` names the target(s).
+ *
+ * Both variants carry `findings` so the scorer's match loop is uniform:
+ * `must_find` matches against `findings`; `must_not_flag` checks `forbidden`.
+ * Stored in the `expected_output` jsonb column of `eval_cases` — no schema
+ * change required (D3 decision, SPEC-03).
+ */
+export const EvalExpectedOutputMustFind = z.object({
+  type: z.literal('must_find'),
+  /** Non-empty set of findings the agent must emit (file + line-range). */
+  findings: z.array(Finding).min(1),
+});
+export type EvalExpectedOutputMustFind = z.infer<typeof EvalExpectedOutputMustFind>;
+
+export const EvalExpectedOutputMustNotFlag = z.object({
+  type: z.literal('must_not_flag'),
+  /** Explicitly empty — the agent must NOT emit anything intersecting `forbidden`. */
+  findings: z.array(Finding).length(0),
+  /** One or more file+range targets that must not be flagged (AC-2). */
+  forbidden: z
+    .array(
+      z.object({
+        file: z.string(),
+        start_line: z.number().int(),
+        end_line: z.number().int(),
+      }),
+    )
+    .min(1),
+});
+export type EvalExpectedOutputMustNotFlag = z.infer<typeof EvalExpectedOutputMustNotFlag>;
+
+export const EvalExpectedOutput = z.discriminatedUnion('type', [
+  EvalExpectedOutputMustFind,
+  EvalExpectedOutputMustNotFlag,
+]);
+export type EvalExpectedOutput = z.infer<typeof EvalExpectedOutput>;
+
+/**
+ * EvalRunGroup — one execution of an agent over its whole case set (D1, AC-13).
+ *
+ * Mirrors the `eval_run_groups` DB table. The per-case `eval_runs` rows point
+ * here via the nullable `run_group_id` FK. Aggregate metrics are stored
+ * first-class so dashboard reads avoid re-aggregating per request.
+ */
+export const EvalRunGroup = z.object({
+  id: z.string(),
+  workspace_id: z.string(),
+  owner_kind: EvalOwnerKind,
+  owner_id: z.string(),
+  /** The agent's `agents.version` at the time of the run (AC-7). */
+  agent_version: z.number().int(),
+  /** Optional human label (e.g. "v7 — tightened rationale"). */
+  label: z.string().nullish(),
+  ran_at: z.string(),
+  /** Aggregate recall across all cases in the group (AC-9). */
+  recall: z.number(),
+  /** Aggregate precision across all cases in the group (AC-10). */
+  precision: z.number(),
+  /** Aggregate citation_accuracy across all cases in the group (AC-12). */
+  citation_accuracy: z.number(),
+  /** Sum of per-case costUsd; null when no cost data was captured. */
+  total_cost_usd: z.number().nullable(),
+});
+export type EvalRunGroup = z.infer<typeof EvalRunGroup>;
+
+/**
+ * EvalRunGroupResult — response for `POST /agents/:id/eval-runs` (T6).
+ *
+ * Wraps the run-group aggregate together with the per-case results so the
+ * caller gets both the group summary and the individual case outcomes in one
+ * response (AC-13/AC-15).
+ */
+export const EvalRunGroupResult = z.object({
+  group: EvalRunGroup,
+  results: z.array(EvalRunResult),
+});
+export type EvalRunGroupResult = z.infer<typeof EvalRunGroupResult>;
 
 /** One point on the dashboard trend (per run, chronological). */
 export const EvalTrendPoint = z.object({
@@ -87,6 +203,41 @@ export const EvalDashboard = z.object({
   alert: z.string().nullable(),
 });
 export type EvalDashboard = z.infer<typeof EvalDashboard>;
+
+/**
+ * EvalCompareResult — response for `POST /agents/:id/eval-compare` (T7, AC-16).
+ *
+ * Per-metric delta (B − A, candidate − baseline) plus the `system_prompt` diff
+ * between the two runs' recorded agent versions. `prompt_a` / `prompt_b` are the
+ * raw prompts, or the literal `"version unavailable"` when a version was pruned
+ * from `agent_versions` (AC-16 graceful degrade). Promoted from a plain TS
+ * interface to a shared Zod contract so the compare route can serialize against
+ * it and the client consumes one canonical shape (no server/client drift).
+ */
+export const EvalCompareResult = z.object({
+  group_a: EvalRunGroup,
+  group_b: EvalRunGroup,
+  /** Per-metric delta: B − A (candidate − baseline). */
+  delta: z.object({
+    recall: z.number(),
+    precision: z.number(),
+    citation_accuracy: z.number(),
+  }),
+  /**
+   * Line-level diff of the two groups' recorded `system_prompt`s. Empty string
+   * when identical; a note when one/both versions are unavailable.
+   */
+  system_prompt_diff: z.string(),
+  /** Raw system_prompt for group A (or `"version unavailable"`). */
+  prompt_a: z.string(),
+  /** Raw system_prompt for group B (or `"version unavailable"`). */
+  prompt_b: z.string(),
+  /** Per-case run rows for group A. */
+  rows_a: z.array(EvalRunRecord),
+  /** Per-case run rows for group B. */
+  rows_b: z.array(EvalRunRecord),
+});
+export type EvalCompareResult = z.infer<typeof EvalCompareResult>;
 
 // ===========================================================================
 // Compose Review
@@ -140,6 +291,35 @@ export const CiFile = z.object({
   editable: z.boolean().default(true),
 });
 export type CiFile = z.infer<typeof CiFile>;
+
+/**
+ * AgentManifest — the agent contract shared by the studio and the CI runner.
+ *
+ * The studio (`CiService.agentYaml`) WRITES this shape to
+ * `.devdigest/agents/<slug>.yaml`; the agent-runner READS it. Keeping one Zod
+ * schema for both ends guarantees the formats never drift. `skills` are slugs
+ * resolved to `.devdigest/skills/<slug>.md`.
+ */
+export const AgentManifest = z.object({
+  name: z.string().min(1),
+  provider: Provider.default('openrouter'),
+  model: z.string().min(1),
+  system_prompt: z.string(),
+  // Tolerate both a missing key and an explicit `null` (YAML `skills:` with no
+  // value parses to null, which `.default([])` does NOT catch) — normalize both
+  // to an empty array so manifests without skills validate cleanly.
+  skills: z
+    .array(z.string())
+    .nullish()
+    .transform((v) => v ?? []),
+  strategy: z.enum(['auto', 'single-pass', 'map-reduce']).default('auto'),
+  // CI gate policy (see CiFailOn) — when the posted review should BLOCK
+  // (REQUEST_CHANGES + fail the check) vs just comment. Default: block on critical.
+  ci_fail_on: CiFailOn.default('critical'),
+});
+export type AgentManifest = z.infer<typeof AgentManifest>;
+/** Caller-facing input type — `.default()` fields stay optional. */
+export type AgentManifestInput = z.input<typeof AgentManifest>;
 
 /** Request body for `POST /agents/:id/export-ci`. */
 export const CiExportInput = z.object({
@@ -217,7 +397,7 @@ export type CiResultArtifact = z.infer<typeof CiResultArtifact>;
 export const ConformanceInput = z.object({
   /** Spec path/id to compare against; if omitted, the first available spec. */
   spec: z.string().nullish(),
-  provider: z.enum(['openai', 'anthropic']).nullish(),
+  provider: z.enum(['openai', 'anthropic', 'openrouter']).nullish(),
   model: z.string().nullish(),
 });
 export type ConformanceInput = z.infer<typeof ConformanceInput>;

@@ -9,12 +9,15 @@ import { Button, Dropdown, ErrorState, Skeleton, Icon, Badge } from "@devdigest/
 import { AppShell } from "@/components/app-shell";
 import { AgentCard } from "../_components/AgentCard";
 import { AgentEditor } from "./_components/AgentEditor";
+import { TABS } from "./_components/AgentEditor/constants";
 import { useAgents, useAgent, useUpdateAgent } from "@/lib/hooks/agents";
 import { useActiveRepo } from "@/lib/providers/repo-context";
 import { ApiError } from "@/lib/api";
 import { s } from "./styles";
 
-const VALID_TABS = ["config", "skills", "context", "history"];
+// Derive the allowlist from the tab registry so a newly-added tab (e.g. "evals")
+// can't be silently rejected here and bounced back to "config".
+const VALID_TABS = TABS.map((t) => t.key);
 
 export default function AgentEditorPage() {
   const params = useParams<{ id: string }>();
