@@ -10,6 +10,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { Button, EmptyState, ErrorState, Icon, Modal, Skeleton } from "@devdigest/ui";
 import type { EvalDashboard, EvalRunGroup } from "@devdigest/shared";
 import {
@@ -27,11 +28,11 @@ import { s } from "./styles";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function pct(value: number): string {
+export function pct(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
-function dateLabel(iso: string): string {
+export function dateLabel(iso: string): string {
   try {
     return new Intl.DateTimeFormat("en", {
       month: "short",
@@ -48,7 +49,7 @@ function dateLabel(iso: string): string {
 // DeltaLabel — textual + iconic delta (a11y: not color alone, SPEC-03 Non-functional)
 // ---------------------------------------------------------------------------
 
-function DeltaLabel({ delta }: { delta: number }) {
+export function DeltaLabel({ delta }: { delta: number }) {
   const positive = delta > 0;
   const zero = delta === 0;
   const label = zero ? "no change" : positive ? `+${pct(delta)}` : pct(delta);
@@ -76,7 +77,7 @@ function DeltaLabel({ delta }: { delta: number }) {
 // PassFailBadge — text + icon, never color alone (a11y)
 // ---------------------------------------------------------------------------
 
-function PassFailBadge({ pass }: { pass: boolean | null }) {
+export function PassFailBadge({ pass }: { pass: boolean | null }) {
   if (pass === null) {
     return (
       <span style={s.passBadge(null)} aria-label="no data">
@@ -109,7 +110,7 @@ interface CompareModalProps {
   onClose: () => void;
 }
 
-function CompareModal({ agentId, agentName, runGroups, onClose }: CompareModalProps) {
+export function CompareModal({ agentId, agentName, runGroups, onClose }: CompareModalProps) {
   const [groupIdA, setGroupIdA] = React.useState<string>(runGroups[0]?.id ?? "");
   const [groupIdB, setGroupIdB] = React.useState<string>(runGroups[1]?.id ?? "");
 
@@ -355,7 +356,17 @@ function AgentCard({ dashboard, name }: AgentCardProps) {
       {/* Agent header */}
       <div style={s.cardHeader}>
         <Icon.FlaskConical size={16} aria-hidden="true" />
-        <div style={s.agentName}>{agentName}</div>
+        {dashboard.owner_id ? (
+          <Link
+            href={`/evals/${dashboard.owner_id}`}
+            style={{ ...s.agentName, textDecoration: "none" }}
+            aria-label={`Open ${agentName} eval detail`}
+          >
+            {agentName}
+          </Link>
+        ) : (
+          <div style={s.agentName}>{agentName}</div>
+        )}
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
           {dashboard.cases_total} case{dashboard.cases_total !== 1 ? "s" : ""}
         </span>

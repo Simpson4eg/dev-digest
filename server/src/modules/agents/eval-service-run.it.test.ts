@@ -206,6 +206,50 @@ d('EvalService.runAgentEvals — integration (T6 run orchestrator)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // (f) runSingleCase: run + score exactly ONE case (case-editor "Run case").
+  // -------------------------------------------------------------------------
+
+  it('(f) runSingleCase: runs ONE case, persists a one-row group, returns its result', async () => {
+    const llm = new MockLLMProvider('openai', { structured: REVIEW_FIXTURE });
+    const container = makeContainer(llm);
+    const agent = await insertAgent('T6-single-agent', 'openai', 2);
+    // Two cases exist, but only ONE is run.
+    const caseId = await insertCase(agent.id);
+    await insertCase(agent.id);
+
+    const svc = new EvalService(pg.handle.db, container);
+    const result = await svc.runSingleCase(workspaceId, agent.id, caseId);
+
+    // Exactly one result, for the requested case, with a persisted run id.
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]!.case_id).toBe(caseId);
+    expect(result.results[0]!.run_id).toBeTruthy();
+    // Group records the agent version + a default single-case label.
+    expect(result.group.agent_version).toBe(2);
+    expect(result.group.label).toMatch(/^single:/);
+    // Exactly ONE review call (one case), and exactly one DB row in the group.
+    const reviewCalls = llm.calls.filter((c) => c.method === 'completeStructured');
+    expect(reviewCalls).toHaveLength(1);
+    const repo = new EvalRepository(pg.handle.db);
+    const rows = await repo.runRowsForGroup(result.group.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.case_id).toBe(caseId);
+  });
+
+  it('(f) runSingleCase: rejects a case that does not belong to the agent (ownership guard)', async () => {
+    const llm = new MockLLMProvider('openai', { structured: REVIEW_FIXTURE });
+    const container = makeContainer(llm);
+    const agentA = await insertAgent('T6-single-owner-A', 'openai');
+    const agentB = await insertAgent('T6-single-owner-B', 'openai');
+    const caseOfA = await insertCase(agentA.id);
+
+    const svc = new EvalService(pg.handle.db, container);
+    await expect(svc.runSingleCase(workspaceId, agentB.id, caseOfA)).rejects.toThrow(
+      /Eval case not found/i,
+    );
+  });
+
+  // -------------------------------------------------------------------------
   // (b) AC-13: run group + one eval_runs row per case with metrics + cost.
   // -------------------------------------------------------------------------
 

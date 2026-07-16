@@ -27,7 +27,7 @@ import type { EvalCaseRow } from './eval-repository.js';
 import { EvalRepository } from './eval-repository.js';
 import { AgentsRepository } from './repository.js';
 import { toAgentVersionDto } from './helpers.js';
-import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
+import { parseUnifiedDiff } from '../../adapters';
 import { ReviewRepository } from '../reviews/repository.js';
 import { reviewPullRequest } from '@devdigest/reviewer-core';
 import { scoreCase, scoreRun } from './eval-scorer.js';
@@ -289,120 +289,12 @@ export class EvalService {
     let hasCost = false;
 
     for (const evalCase of cases) {
-      const caseStart = Date.now();
-      try {
-        // AC-6: parse the stored inputDiff TEXT verbatim — no re-fetch.
-        const diff = parseUnifiedDiff(evalCase.inputDiff ?? '');
-
-        // ONE review LLM call per case (the thing under test).
-        const provider = await this.container.llm(
-          agent.provider as 'openai' | 'anthropic' | 'openrouter',
-        );
-        const outcome = await reviewPullRequest({
-          systemPrompt: agent.systemPrompt,
-          model: agent.model,
-          diff,
-          llm: provider,
-          strategy: (agent.strategy as import('@devdigest/reviewer-core').ReviewStrategy) ?? 'auto',
-        });
-
-        const durationMs = Date.now() - caseStart;
-        const costUsd = outcome.costUsd ?? null;
-        if (costUsd !== null) {
-          totalCostUsd += costUsd;
-          hasCost = true;
-        }
-
-        const emittedFindings = outcome.review.findings;
-
-        // AC-11: score with ZERO additional LLM calls.
-        // Pass rawExpected straight through so the scorer's safeParse handles
-        // malformed-case-skip without throwing (SPEC-03 edge case).
-        const score = scoreCase(evalCase.expectedOutput, emittedFindings, diff);
-        perCaseScores.push(score);
-
-        // AC-13: persist one eval_runs row per case, linked to the group.
-        const runRow = await this.repo.insertRunRow(groupId, evalCase.id, {
-          actualOutput: emittedFindings as unknown,
-          pass: score.pass,
-          recall: score.recall,
-          precision: score.precision,
-          citationAccuracy: score.citation_accuracy,
-          durationMs,
-          costUsd,
-        });
-
-        results.push({
-          run_id: runRow.id,
-          case_id: evalCase.id,
-          result: {
-            recall: score.recall,
-            precision: score.precision,
-            citation_accuracy: score.citation_accuracy,
-            traces_passed: score.pass ? 1 : 0,
-            traces_total: 1,
-            duration_ms: durationMs,
-            cost_usd: costUsd,
-            per_trace: [
-              {
-                name: evalCase.name ?? evalCase.id,
-                pass: score.pass,
-                expected: evalCase.expectedOutput ?? null,
-                actual: emittedFindings,
-              },
-            ],
-          },
-        });
-      } catch (err) {
-        // Per-case failure isolation: a review error fails ONLY this case row.
-        // The error is surfaced in the run row (pass=false, metrics=0) and a
-        // result entry is added so callers can see which case failed.
-        const durationMs = Date.now() - caseStart;
-        const errScore: import('./eval-scorer.js').ScoredCase = {
-          pass: false,
-          recall: 0,
-          precision: 0,
-          citation_accuracy: 0,
-          skipped: true,
-          skipReason: err instanceof Error ? err.message : String(err),
-        };
-        perCaseScores.push(errScore);
-
-        try {
-          const runRow = await this.repo.insertRunRow(groupId, evalCase.id, {
-            actualOutput: null,
-            pass: false,
-            recall: 0,
-            precision: 0,
-            citationAccuracy: 0,
-            durationMs,
-            costUsd: null,
-          });
-          results.push({
-            run_id: runRow.id,
-            case_id: evalCase.id,
-            result: {
-              recall: 0,
-              precision: 0,
-              citation_accuracy: 0,
-              traces_passed: 0,
-              traces_total: 1,
-              duration_ms: durationMs,
-              cost_usd: null,
-              per_trace: [
-                {
-                  name: evalCase.name ?? evalCase.id,
-                  pass: false,
-                  expected: evalCase.expectedOutput ?? null,
-                  actual: null,
-                },
-              ],
-            },
-          });
-        } catch {
-          // If even the failure row can't be persisted, skip silently — the run
-          // group itself remains intact.
-        }
+      const { score, result, costUsd } = await this.executeCase(agent, groupId, evalCase);
+      perCaseScores.push(score);
+      if (result) results.push(result);
+      if (costUsd !== null) {
+        totalCostUsd += costUsd;
+        hasCost = true;
       }
     }
 
@@ -453,6 +345,197 @@ export class EvalService {
     return results;
   }
 
+  /**
+   * Run + score ONE case against the given run group and persist its eval_runs row.
+   * Shared by `runAgentEvals` (loop) and `runSingleCase`. Per-case failure isolation:
+   * a review error yields a failed score + failed run row rather than throwing.
+   * Returns the scored result, the API `EvalRunResult` (or null if even the failure
+   * row could not be persisted), and the case's LLM cost.
+   */
+  private async executeCase(
+    agent: NonNullable<Awaited<ReturnType<AgentsRepository['getById']>>>,
+    groupId: string,
+    evalCase: EvalCaseRow,
+  ): Promise<{
+    score: import('./eval-scorer.js').ScoredCase;
+    result: EvalRunResult | null;
+    costUsd: number | null;
+  }> {
+    const caseStart = Date.now();
+    try {
+      // AC-6: parse the stored inputDiff TEXT verbatim — no re-fetch.
+      const diff = parseUnifiedDiff(evalCase.inputDiff ?? '');
+
+      // ONE review LLM call per case (the thing under test).
+      const provider = await this.container!.llm(
+        agent.provider as 'openai' | 'anthropic' | 'openrouter',
+      );
+      const outcome = await reviewPullRequest({
+        systemPrompt: agent.systemPrompt,
+        model: agent.model,
+        diff,
+        llm: provider,
+        strategy: (agent.strategy as import('@devdigest/reviewer-core').ReviewStrategy) ?? 'auto',
+      });
+
+      const durationMs = Date.now() - caseStart;
+      const costUsd = outcome.costUsd ?? null;
+      const emittedFindings = outcome.review.findings;
+
+      // AC-11: score with ZERO additional LLM calls.
+      const score = scoreCase(evalCase.expectedOutput, emittedFindings, diff);
+
+      // AC-13: persist one eval_runs row for this case, linked to the group.
+      const runRow = await this.repo.insertRunRow(groupId, evalCase.id, {
+        actualOutput: emittedFindings as unknown,
+        pass: score.pass,
+        recall: score.recall,
+        precision: score.precision,
+        citationAccuracy: score.citation_accuracy,
+        durationMs,
+        costUsd,
+      });
+
+      return {
+        score,
+        costUsd,
+        result: {
+          run_id: runRow.id,
+          case_id: evalCase.id,
+          result: {
+            recall: score.recall,
+            precision: score.precision,
+            citation_accuracy: score.citation_accuracy,
+            traces_passed: score.pass ? 1 : 0,
+            traces_total: 1,
+            duration_ms: durationMs,
+            cost_usd: costUsd,
+            per_trace: [
+              {
+                name: evalCase.name ?? evalCase.id,
+                pass: score.pass,
+                expected: evalCase.expectedOutput ?? null,
+                actual: emittedFindings,
+              },
+            ],
+          },
+        },
+      };
+    } catch (err) {
+      // Per-case failure isolation: a review error fails ONLY this case row.
+      const durationMs = Date.now() - caseStart;
+      const errScore: import('./eval-scorer.js').ScoredCase = {
+        pass: false,
+        recall: 0,
+        precision: 0,
+        citation_accuracy: 0,
+        skipped: true,
+        skipReason: err instanceof Error ? err.message : String(err),
+      };
+
+      try {
+        const runRow = await this.repo.insertRunRow(groupId, evalCase.id, {
+          actualOutput: null,
+          pass: false,
+          recall: 0,
+          precision: 0,
+          citationAccuracy: 0,
+          durationMs,
+          costUsd: null,
+        });
+        return {
+          score: errScore,
+          costUsd: null,
+          result: {
+            run_id: runRow.id,
+            case_id: evalCase.id,
+            result: {
+              recall: 0,
+              precision: 0,
+              citation_accuracy: 0,
+              traces_passed: 0,
+              traces_total: 1,
+              duration_ms: durationMs,
+              cost_usd: null,
+              per_trace: [
+                {
+                  name: evalCase.name ?? evalCase.id,
+                  pass: false,
+                  expected: evalCase.expectedOutput ?? null,
+                  actual: null,
+                },
+              ],
+            },
+          },
+        };
+      } catch {
+        // If even the failure row can't be persisted, drop the result row — the
+        // run group itself remains intact (caller still counts the failed score).
+        return { score: errScore, costUsd: null, result: null };
+      }
+    }
+  }
+
+  /**
+   * Run + score a SINGLE eval case (the case-editor "Run case" button).
+   *
+   * Creates its own one-row run group (so the run is real + shows in history),
+   * runs the one case via the shared `executeCase` path (ONE review LLM call,
+   * zero extra scoring calls — AC-11), and returns the group + the single result.
+   *
+   * @param workspaceId  Workspace scoping (tenant safety).
+   * @param agentId      The reviewing agent that owns the case.
+   * @param caseId       The eval case to run.
+   * @param label        Optional run-group label; defaults to `single: <case name>`.
+   */
+  async runSingleCase(
+    workspaceId: string,
+    agentId: string,
+    caseId: string,
+    label?: string,
+  ): Promise<EvalRunGroupResult> {
+    if (!this.container) {
+      throw new Error(
+        'EvalService.runSingleCase requires a Container (for LLM access). ' +
+          'Construct EvalService with new EvalService(db, container).',
+      );
+    }
+
+    const agent = await this.agentsRepo.getById(workspaceId, agentId);
+    if (!agent) throw new Error(`Agent not found: ${agentId} in workspace ${workspaceId}`);
+
+    // Tenant + ownership safety: the case must exist in this workspace AND belong
+    // to this agent (never run another agent's case).
+    const evalCase = await this.repo.getCase(workspaceId, caseId);
+    if (!evalCase || evalCase.ownerKind !== 'agent' || evalCase.ownerId !== agentId) {
+      throw new Error(`Eval case not found: ${caseId} for agent ${agentId}`);
+    }
+
+    const groupId = await this.repo.createRunGroup(workspaceId, {
+      ownerKind: 'agent',
+      ownerId: agentId,
+      agentVersion: agent.version,
+      label: label ?? `single: ${evalCase.name}`,
+      aggregates: { recall: 0, precision: 0, citationAccuracy: 0 },
+      totalCostUsd: null,
+    });
+
+    const { score, result, costUsd } = await this.executeCase(agent, groupId, evalCase);
+
+    const aggregate = scoreRun([score]);
+    await this.repo.updateRunGroupAggregates(groupId, {
+      recall: aggregate.recall,
+      precision: aggregate.precision,
+      citationAccuracy: aggregate.citation_accuracy,
+      totalCostUsd: costUsd,
+    });
+
+    const group = await this.repo.getRunGroup(groupId, workspaceId);
+    if (!group) throw new Error(`Run group not found after creation: ${groupId}`);
+
+    return { group, results: result ? [result] : [] };
+  }
+
   // ---- T7: History / Compare / Promote / Dashboard (AC-15/16/18/20) ----------
 
   /**
@@ -484,7 +567,13 @@ export class EvalService {
     // latest group's recent_runs come from a single round-trip (AC-15).
     const rowsByGroup = await this.repo.runRowsForGroups(groups.map((g) => g.id));
 
-    const trend: EvalTrendPoint[] = groups.map((g) => {
+    // Full runs = agent-wide runs. Exclude single-case "Run case" groups (label
+    // `single: …`, one row each) so a quick per-case check never redefines the
+    // agent's headline metrics or trend. Single-case runs still feed the per-case
+    // badges via recent_runs below.
+    const fullGroups = groups.filter((g) => !(g.label ?? '').startsWith('single:'));
+
+    const trend: EvalTrendPoint[] = fullGroups.map((g) => {
       const rows = rowsByGroup.get(g.id) ?? [];
       const tracesTotal = rows.length;
       const tracesPassed = rows.filter((r) => r.pass === true).length;
@@ -500,21 +589,34 @@ export class EvalService {
       };
     });
 
-    // recent_runs = the latest group's per-case rows (newest-first, groups[0]).
-    const recentRuns: EvalRunRecord[] = groups[0] ? (rowsByGroup.get(groups[0].id) ?? []) : [];
+    // recent_runs = the LATEST run row PER CASE across ALL groups (newest-first),
+    // so running cases individually accumulates their badges instead of the newest
+    // single-case group wiping the others back to "never run".
+    const recentRuns: EvalRunRecord[] = [];
+    const seenCases = new Set<string>();
+    for (const g of groups) {
+      for (const row of rowsByGroup.get(g.id) ?? []) {
+        if (row.case_id && !seenCases.has(row.case_id)) {
+          seenCases.add(row.case_id);
+          recentRuns.push(row);
+        }
+      }
+    }
 
-    const latest = groups[0];
-    const previous = groups[1];
+    // Current metrics + delta come from the latest FULL runs (not single-case runs).
+    const latest = fullGroups[0];
+    const previous = fullGroups[1];
+    const latestRows = latest ? (rowsByGroup.get(latest.id) ?? []) : [];
+    const tracesTotal = latestRows.length;
+    const tracesPassed = latestRows.filter((r) => r.pass === true).length;
 
     const currentMetrics = latest
       ? {
           recall: latest.recall,
           precision: latest.precision,
           citation_accuracy: latest.citation_accuracy,
-          traces_passed: trend[0]
-            ? Math.round(trend[0].pass_rate * (recentRuns.length || 0))
-            : 0,
-          traces_total: recentRuns.length,
+          traces_passed: tracesPassed,
+          traces_total: tracesTotal,
           cost_usd: latest.total_cost_usd,
         }
       : {

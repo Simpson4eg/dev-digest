@@ -68,6 +68,7 @@ const useRunAgentEvalsMock = vi.fn();
 const useDeleteEvalCaseMock = vi.fn();
 const useCreateEvalCaseManualMock = vi.fn();
 const useRunHistoryMock = vi.fn();
+const useRunEvalCaseMock = vi.fn();
 
 vi.mock("@/lib/hooks/evals", () => ({
   useEvalCases: (id: unknown) => useEvalCasesMock(id),
@@ -75,6 +76,7 @@ vi.mock("@/lib/hooks/evals", () => ({
   useDeleteEvalCase: () => useDeleteEvalCaseMock(),
   useCreateEvalCaseManual: () => useCreateEvalCaseManualMock(),
   useRunHistory: (id: unknown) => useRunHistoryMock(id),
+  useRunEvalCase: () => useRunEvalCaseMock(),
 }));
 
 import { EvalsTab } from "./EvalsTab";
@@ -122,6 +124,7 @@ function setupDefaultMocks(overrides?: {
 
   useCreateEvalCaseManualMock.mockReturnValue({
     mutate: mockCreateManualMutate,
+    mutateAsync: vi.fn(),
     isPending: false,
   });
 
@@ -129,6 +132,12 @@ function setupDefaultMocks(overrides?: {
     data: undefined,
     isLoading: false,
     isError: false,
+  });
+
+  useRunEvalCaseMock.mockReturnValue({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
   });
 }
 
@@ -321,6 +330,62 @@ describe("EvalsTab", () => {
 
     // The modal opens: it renders the "New eval case" title.
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("New-case modal exposes the Finding-skeleton button and Run-on-save toggle", () => {
+    setupDefaultMocks();
+
+    renderWithIntl(<EvalsTab agent={AGENT} />);
+    fireEvent.click(screen.getByRole("button", { name: /new case/i }));
+
+    expect(screen.getByRole("button", { name: /finding skeleton/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/run the case immediately after saving/i)).toBeInTheDocument();
+  });
+
+  it("opening a case shows 'Run case'; running it calls the mutation and shows the last-run status", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({
+      group: { id: "grp-x" },
+      results: [
+        {
+          run_id: "r1",
+          case_id: "case-1",
+          result: {
+            recall: 1,
+            precision: 1,
+            citation_accuracy: 1,
+            traces_passed: 1,
+            traces_total: 1,
+            duration_ms: 1800,
+            cost_usd: 0.02,
+            per_trace: [
+              {
+                name: "stripe-key-leak",
+                pass: true,
+                expected: { type: "must_find", findings: [{ file: "src/config.ts" }] },
+                actual: [{ file: "src/config.ts" }],
+              },
+            ],
+          },
+        },
+      ],
+    });
+    setupDefaultMocks();
+    useRunEvalCaseMock.mockReturnValue({ mutate: vi.fn(), mutateAsync, isPending: false });
+
+    renderWithIntl(<EvalsTab agent={AGENT} />);
+
+    // Open the case detail (view) modal.
+    fireEvent.click(screen.getByRole("button", { name: "View stripe-key-leak" }));
+
+    const runCaseBtn = screen.getByRole("button", { name: /run case/i });
+    await act(async () => {
+      fireEvent.click(runCaseBtn);
+    });
+
+    expect(mutateAsync).toHaveBeenCalledWith({ agentId: "ag1", caseId: "case-1" });
+    // Status line: "Last run passed · expected 1 finding, got 1 · 1.8s · $0.02"
+    expect(screen.getByText(/expected 1 finding, got 1/)).toBeInTheDocument();
+    expect(screen.getByText(/\$0\.02/)).toBeInTheDocument();
   });
 
   it("shows 8+ cases without truncation (AC-5 list capability)", () => {

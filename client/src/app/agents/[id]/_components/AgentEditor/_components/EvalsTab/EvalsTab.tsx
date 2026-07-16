@@ -13,7 +13,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Button, EmptyState, ErrorState, Icon, Modal, Skeleton } from "@devdigest/ui";
 import type { Agent, EvalCase, EvalRunGroupResult, EvalRunResult } from "@devdigest/shared";
-import { useEvalCases, useDeleteEvalCase, useRunAgentEvals, useCreateEvalCaseManual, useRunHistory } from "@/lib/hooks/evals";
+import { useEvalCases, useDeleteEvalCase, useRunAgentEvals, useCreateEvalCaseManual, useRunHistory, useRunEvalCase } from "@/lib/hooks/evals";
 import { s } from "./styles";
 
 // ---------------------------------------------------------------------------
@@ -54,6 +54,102 @@ function TypeBadge({ mustFind }: { mustFind: boolean }) {
     <span style={s.typeBadge(mustFind)} aria-label={mustFind ? "expects must_find" : "expects must_not_flag"}>
       {mustFind ? "must_find" : "must_not_flag"}
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DiffPreview — lightweight unified-diff colourizer (green +, red −, hunk @@)
+// ---------------------------------------------------------------------------
+
+function diffLineStyle(kind: "add" | "del" | "hunk" | "ctx"): React.CSSProperties {
+  const base: React.CSSProperties = { whiteSpace: "pre-wrap", padding: "0 6px" };
+  if (kind === "add") return { ...base, background: "rgba(46,160,67,0.15)", color: "var(--ok, #3fb950)" };
+  if (kind === "del") return { ...base, background: "rgba(248,81,73,0.15)", color: "var(--crit, #f85149)" };
+  if (kind === "hunk") return { ...base, color: "var(--accent, #58a6ff)" };
+  return { ...base, color: "var(--text-muted)" };
+}
+
+function DiffPreview({ diff }: { diff: string }) {
+  const lines = diff.split("\n");
+  return (
+    <pre
+      style={{
+        margin: 0,
+        maxHeight: 280,
+        overflow: "auto",
+        border: "1px solid var(--border)",
+        borderRadius: 8,
+        fontSize: 12,
+        fontFamily: "var(--font-mono, monospace)",
+        lineHeight: 1.5,
+        padding: "8px 0",
+      }}
+      tabIndex={0}
+      aria-label="Diff preview"
+    >
+      {lines.map((ln, i) => {
+        const kind: "add" | "del" | "hunk" | "ctx" =
+          ln.startsWith("+") && !ln.startsWith("+++")
+            ? "add"
+            : ln.startsWith("-") && !ln.startsWith("---")
+              ? "del"
+              : ln.startsWith("@@")
+                ? "hunk"
+                : "ctx";
+        return (
+          <div key={i} style={diffLineStyle(kind)}>
+            {ln || " "}
+          </div>
+        );
+      })}
+    </pre>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LastRunStatus — "Last run passed · expected N, got M · 1.8s · $0.02"
+// ---------------------------------------------------------------------------
+
+/** Count findings in an expected_output payload ({ findings: [...] }); 0 otherwise. */
+function countExpectedFindings(expected: unknown): number {
+  if (expected && typeof expected === "object" && "findings" in expected) {
+    const f = (expected as { findings?: unknown }).findings;
+    return Array.isArray(f) ? f.length : 0;
+  }
+  return 0;
+}
+
+function LastRunStatus({ result }: { result: EvalRunResult }) {
+  const r = result.result;
+  const trace = r.per_trace?.[0];
+  const pass = trace?.pass ?? false;
+  const expected = countExpectedFindings(trace?.expected);
+  const got = Array.isArray(trace?.actual) ? trace!.actual.length : 0;
+  const secs = (r.duration_ms / 1000).toFixed(1);
+  const cost = r.cost_usd != null ? `$${r.cost_usd.toFixed(2)}` : "—";
+
+  return (
+    <div
+      role="status"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginTop: 12,
+        padding: "10px 12px",
+        borderRadius: 8,
+        fontSize: 13,
+        border: "1px solid var(--border)",
+        background: pass ? "rgba(46,160,67,0.10)" : "rgba(248,81,73,0.10)",
+        color: pass ? "var(--ok, #3fb950)" : "var(--crit, #f85149)",
+      }}
+    >
+      {pass ? <Icon.CheckCircle size={14} aria-hidden="true" /> : <Icon.XCircle size={14} aria-hidden="true" />}
+      <span>
+        Last run {pass ? "passed" : "failed"} · expected {expected} finding{expected !== 1 ? "s" : ""}, got {got} ·{" "}
+        {secs}s · {cost}
+      </span>
+    </div>
   );
 }
 
@@ -100,6 +196,9 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
 
   // Use typed api.post mutation instead of raw fetch (CLIENT-001/002).
   const createCase = useCreateEvalCaseManual();
+  const runCase = useRunEvalCase();
+  const [runOnSave, setRunOnSave] = React.useState(true);
+  const [lastResult, setLastResult] = React.useState<EvalRunResult | null>(null);
 
   const validateJson = (value: string) => {
     try {
@@ -115,7 +214,7 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
     validateJson(value);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (jsonError) return;
     let expectedOutput: unknown;
     try {
@@ -125,8 +224,8 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
       return;
     }
 
-    createCase.mutate(
-      {
+    try {
+      const created = await createCase.mutateAsync({
         agentId,
         owner_kind: "agent",
         owner_id: agentId,
@@ -134,19 +233,22 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
         input_diff: diff,
         input_meta: prTitle || prBody ? { title: prTitle, body: prBody } : undefined,
         expected_output: expectedOutput,
-      },
-      {
-        onSuccess: () => {
-          onCreated();
-          onClose();
-        },
-        // Errors are surfaced by the hook's onError toast — modal stays open
-        // so the user can retry (CLIENT-002: notify.error is called by hook).
-      },
-    );
+      });
+      onCreated();
+      if (runOnSave) {
+        // Run the freshly-created case and keep the modal open to show the status.
+        const res = await runCase.mutateAsync({ agentId, caseId: created.id });
+        setLastResult(res.results[0] ?? null);
+      } else {
+        onClose();
+      }
+    } catch {
+      // Errors are surfaced by the hooks' onError toasts — modal stays open so
+      // the user can retry (CLIENT-002).
+    }
   };
 
-  const saving = createCase.isPending;
+  const saving = createCase.isPending || runCase.isPending;
 
   return (
     <Modal
@@ -155,18 +257,31 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
       subtitle="Provide a diff and the findings this agent must (or must not) emit."
       onClose={onClose}
       footer={
-        <div style={s.modalFooter}>
-          <Button kind="ghost" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button
-            kind="primary"
-            onClick={handleSave}
-            loading={saving}
-            disabled={!!jsonError || saving}
+        <div style={{ ...s.modalFooter, justifyContent: "space-between", alignItems: "center" }}>
+          <label
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-muted)", cursor: "pointer" }}
           >
-            {saving ? t("saving") : t("save")}
-          </Button>
+            <input
+              type="checkbox"
+              checked={runOnSave}
+              onChange={(e) => setRunOnSave(e.target.checked)}
+              aria-label="Run the case immediately after saving"
+            />
+            Run on save
+          </label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button kind="ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              onClick={handleSave}
+              loading={saving}
+              disabled={!!jsonError || saving}
+            >
+              {saving ? t("saving") : t("save")}
+            </Button>
+          </div>
         </div>
       }
     >
@@ -199,13 +314,21 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
             ))}
           </div>
           {inputTab === "diff" && (
-            <textarea
-              value={diff}
-              onChange={(e) => setDiff(e.target.value)}
-              placeholder={t("diffPlaceholder")}
-              rows={10}
-              style={s.modalTextarea}
-            />
+            <>
+              <textarea
+                value={diff}
+                onChange={(e) => setDiff(e.target.value)}
+                placeholder={t("diffPlaceholder")}
+                rows={10}
+                style={s.modalTextarea}
+              />
+              {diff.trim() !== "" && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={s.modalLabel}>Preview</div>
+                  <DiffPreview diff={diff} />
+                </div>
+              )}
+            </>
           )}
           {inputTab === "files" && (
             <textarea
@@ -241,13 +364,30 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
 
         {/* Expected output (findings JSON) */}
         <div>
-          <div style={s.modalLabel}>
-            {t("expectedOutput")}
-            {jsonError ? (
-              <span style={{ color: "var(--crit)", marginLeft: 8 }}>{jsonError}</span>
-            ) : (
-              <span style={{ color: "var(--ok)", marginLeft: 8 }}>{t("validJson")}</span>
-            )}
+          <div style={{ ...s.modalLabel, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span>
+              {t("expectedOutput")}
+              {jsonError ? (
+                <span style={{ color: "var(--crit)", marginLeft: 8 }}>{jsonError}</span>
+              ) : (
+                <span style={{ color: "var(--ok)", marginLeft: 8 }}>{t("validJson")}</span>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleExpectedChange(DEFAULT_EXPECTED)}
+              style={{
+                background: "none",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                padding: "2px 8px",
+                fontSize: 12,
+                color: "var(--text-muted)",
+                cursor: "pointer",
+              }}
+            >
+              + Finding skeleton
+            </button>
           </div>
           <textarea
             value={expectedJson}
@@ -256,6 +396,9 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
             style={s.modalTextarea}
           />
         </div>
+
+        {/* Last-run status (shown after a "Run on save" run) */}
+        {lastResult && <LastRunStatus result={lastResult} />}
       </div>
     </Modal>
   );
@@ -265,23 +408,49 @@ function NewCaseModal({ agentId, onClose, onCreated }: NewCaseModalProps) {
 // View eval case modal — read-only: expectation type + frozen input + expected JSON
 // ---------------------------------------------------------------------------
 
-function ViewCaseModal({ evalCase, onClose }: { evalCase: EvalCase; onClose: () => void }) {
+function ViewCaseModal({
+  evalCase,
+  agentId,
+  onClose,
+}: {
+  evalCase: EvalCase;
+  agentId: string;
+  onClose: () => void;
+}) {
   const eo = evalCase.expected_output;
   const type =
     eo && typeof eo === "object" && "type" in eo
       ? String((eo as { type?: unknown }).type)
       : "unknown";
 
+  const runCase = useRunEvalCase();
+  const [lastResult, setLastResult] = React.useState<EvalRunResult | null>(null);
+
+  const handleRunCase = async () => {
+    try {
+      const res = await runCase.mutateAsync({ agentId, caseId: evalCase.id });
+      setLastResult(res.results[0] ?? null);
+    } catch {
+      // Error toasted by the hook's onError.
+    }
+  };
+
+  const running = runCase.isPending;
+  const diff = evalCase.input_diff || "";
+
   return (
     <Modal
       width={740}
       title={evalCase.name}
-      subtitle="Read-only view of this case's frozen input and expected output."
+      subtitle="This case's frozen input and expected output. Run it to check the agent."
       onClose={onClose}
       footer={
         <div style={s.modalFooter}>
-          <Button kind="ghost" onClick={onClose}>
+          <Button kind="ghost" onClick={onClose} disabled={running}>
             Close
+          </Button>
+          <Button kind="primary" icon="Play" onClick={handleRunCase} loading={running} disabled={running}>
+            {running ? "Running…" : "Run case"}
           </Button>
         </div>
       }
@@ -294,13 +463,16 @@ function ViewCaseModal({ evalCase, onClose }: { evalCase: EvalCase; onClose: () 
 
         <div>
           <div style={s.modalLabel}>Input diff (frozen)</div>
-          <textarea readOnly value={evalCase.input_diff || "(no diff stored)"} rows={10} style={s.modalTextarea} />
+          {diff ? <DiffPreview diff={diff} /> : <div style={s.meta}>(no diff stored)</div>}
         </div>
 
         <div>
           <div style={s.modalLabel}>Expected output (JSON)</div>
           <textarea readOnly value={JSON.stringify(eo, null, 2)} rows={12} style={s.modalTextarea} />
         </div>
+
+        {/* Last-run status (shown after "Run case") */}
+        {lastResult && <LastRunStatus result={lastResult} />}
       </div>
     </Modal>
   );
@@ -448,7 +620,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
         />
       )}
 
-      {viewCase && <ViewCaseModal evalCase={viewCase} onClose={() => setViewCase(null)} />}
+      {viewCase && <ViewCaseModal evalCase={viewCase} agentId={agent.id} onClose={() => setViewCase(null)} />}
     </div>
   );
 }

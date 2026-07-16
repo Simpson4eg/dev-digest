@@ -20,7 +20,7 @@ import type { Review } from '@devdigest/shared';
 import { startPg, dockerAvailable, type PgFixture } from '../../../test/helpers/pg.js';
 import { seed } from '../../db/seed.js';
 import * as t from '../../db/schema.js';
-import { MockLLMProvider, MockSecretsProvider, MockAuthProvider } from '../../adapters/mocks.js';
+import { MockLLMProvider, MockSecretsProvider, MockAuthProvider } from '../../adapters';
 import { EvalService } from './eval-service.js';
 import { EvalRepository } from './eval-repository.js';
 import { Container } from '../../platform/container.js';
@@ -235,6 +235,30 @@ d('EvalService — T7 dashboard / compare / promote (integration)', () => {
     expect(history.current.recall).toBe(0);
     expect(history.current.precision).toBe(0);
     expect(history.current.citation_accuracy).toBe(0);
+  });
+
+  it('(a) runHistory.recent_runs keeps the latest run PER CASE across single-case runs', async () => {
+    const llm = new MockLLMProvider('openai', { structured: REVIEW_FIXTURE });
+    const container = makeContainer(llm);
+    const agent = await insertAgent('T7-per-case-agent');
+    const caseA = await insertCase(agent.id);
+    const caseB = await insertCase(agent.id);
+
+    const runSvc = new EvalService(pg.handle.db, container);
+    // Run each case individually — each creates its own one-row "single:" group.
+    await runSvc.runSingleCase(workspaceId, agent.id, caseA);
+    await runSvc.runSingleCase(workspaceId, agent.id, caseB);
+
+    const svc = new EvalService(pg.handle.db);
+    const history = await svc.runHistory(workspaceId, agent.id);
+
+    // Both cases retain a badge — neither reverts to "never run" (the bug).
+    const caseIds = history.recent_runs.map((r) => r.case_id);
+    expect(caseIds).toContain(caseA);
+    expect(caseIds).toContain(caseB);
+
+    // Single-case runs do NOT define the agent's headline metrics/trend.
+    expect(history.trend).toHaveLength(0);
   });
 
   // =========================================================================

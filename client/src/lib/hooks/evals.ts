@@ -169,6 +169,31 @@ export function useRunAgentEvals() {
   });
 }
 
+/**
+ * Runs a SINGLE eval case (`POST /agents/:id/eval-cases/:caseId/run`).
+ * Returns `EvalRunGroupResult` (a one-row run group + that case's result) so the
+ * case editor can show a "Last run passed · expected N, got M · time · cost" line.
+ * On success: invalidates the agent's run groups + the cross-agent dashboard so
+ * history/metrics reflect the new run.
+ */
+export function useRunEvalCase() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ agentId, caseId, label }: { agentId: string; caseId: string; label?: string }) =>
+      api.post<EvalRunGroupResult>(`/agents/${agentId}/eval-cases/${caseId}/run`, { label }),
+    onSuccess: (_data, { agentId }) => {
+      notify.success("Case run complete");
+      void qc.invalidateQueries({ queryKey: qk.evalRunGroups(agentId) });
+      void qc.invalidateQueries({ queryKey: qk.evalRunGroupList(agentId) });
+      void qc.invalidateQueries({ queryKey: qk.evalDashboard() });
+    },
+    onError: () => {
+      notify.error("Failed to run case");
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // T10 hooks — Eval Dashboard + Compare modal + Promote
 // ---------------------------------------------------------------------------

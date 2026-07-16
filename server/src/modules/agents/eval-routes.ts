@@ -228,6 +228,27 @@ export default async function evalRoutes(appBase: FastifyInstance) {
     },
   );
 
+  // ---- POST /agents/:id/eval-cases/:caseId/run ----------------------------
+  //
+  // Run a SINGLE eval case (the case-editor "Run case" button). Creates a
+  // one-row run group and returns EvalRunGroupResult (group + the single result),
+  // so the client can show a per-case "expected N, got M · time · cost" status.
+
+  app.post(
+    '/agents/:id/eval-cases/:caseId/run',
+    {
+      schema: {
+        params: EvalCaseParams,
+        body: EvalRunBody,
+        response: { 200: EvalRunGroupResult },
+      },
+    },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      return svc.runSingleCase(workspaceId, req.params.id, req.params.caseId, req.body.label);
+    },
+  );
+
   // ---- POST /eval-runs/all (T6, AC-20) ------------------------------------
   //
   // Run ALL enabled agents in the workspace over their own frozen case sets.
